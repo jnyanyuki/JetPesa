@@ -100,6 +100,8 @@ export async function POST(request) {
           reference,
           message: 'STK push sent. Complete payment on your phone.',
         });
+      } else {
+        console.error('PayHero API Error Response:', phData);
       }
     }
 
@@ -167,6 +169,7 @@ export async function POST(request) {
       message: 'STK push sent. Complete payment on your phone.',
     });
   } catch (error) {
+    console.error('Payment Initiation Error:', error);
     return NextResponse.json(
       {
         success: false,

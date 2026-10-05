@@ -265,7 +265,7 @@ export default function UltimateJetPesaCockpit() {
     const px = ['070***', '071***', '072***', '079***', '011***', '074***', '010***'];
     const id = Math.random().toString(36).substring(2, 8);
     return {
-      id: Date.now() + Math.random(),
+      id: `bet-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       seed: id,
       username: px[Math.floor(Math.random() * px.length)] + Math.floor(Math.random() * 89 + 10),
       bet: Math.floor(Math.random() * 4800 + 100),
@@ -331,7 +331,7 @@ export default function UltimateJetPesaCockpit() {
     return Math.max(1, Math.floor(edged) / 100);
   };
 
-  const generateLocalProvablyRound = async (nonce) => {
+  const generateLocalProvablyRound = useCallback(async (nonce) => {
     const randomBytes = new Uint8Array(32);
     crypto.getRandomValues(randomBytes);
     const serverSeed = [...randomBytes].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -345,7 +345,7 @@ export default function UltimateJetPesaCockpit() {
       clientSeed, verifyInput, houseEdge: 0.01,
       algorithm: 'HMAC_SHA256(serverSeed, clientSeed:nonce), SHA256 serverSeed commitment',
     };
-  };
+  }, [user?.uid]);
 
   const persistCrashToHistory = useCallback((crashPoint, cycleIndex) => {
     if (recordedCrashCycleRef.current === cycleIndex) return;
@@ -418,7 +418,7 @@ export default function UltimateJetPesaCockpit() {
     fetchProvablyRound(1);
     startFreshLiveBetsFeed();
     return () => unsubscribe();
-  }, [router, fetchProvablyRound, startFreshLiveBetsFeed]);
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -762,12 +762,20 @@ export default function UltimateJetPesaCockpit() {
     if (isNaN(amt) || amt < 49) { triggerToast('Minimum deposit is KES 49.', 'error'); return; }
     if ((!cleanPhone.startsWith('07') && !cleanPhone.startsWith('01')) || cleanPhone.length !== 10) { triggerToast('Enter a valid M-Pesa phone number.', 'error'); return; }
     if (!user?.uid) { triggerToast('Login session expired. Please sign in again.', 'error'); return; }
+    
+    let formattedPhone = cleanPhone;
+    if (cleanPhone.startsWith('0')) {
+      formattedPhone = '254' + cleanPhone.slice(1);
+    } else if (cleanPhone.startsWith('+')) {
+      formattedPhone = cleanPhone.slice(1);
+    }
+    
     setLoadingDeposit(true);
     try {
       const res = await fetch('/api/payhero', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt, phone: cleanPhone, username: user.uid }),
+        body: JSON.stringify({ amount: amt, phone: formattedPhone, username: user.uid }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Payment initiation failed.');

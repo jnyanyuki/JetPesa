@@ -177,7 +177,7 @@ function AuthForm() {
         </div>
       )}
 
-      <form onSubmit={handleAuthenticationExecution} className="jp-auth-form">
+      <div className="jp-auth-form">
         {activeTab === 'login' ? (
           <div className="jp-input-group">
             <label className="jp-input-label">EMAIL OR PHONE</label>
@@ -248,7 +248,8 @@ function AuthForm() {
         </div>
 
         <button
-          type="submit"
+          type="button"
+          onClick={handleAuthenticationExecution}
           disabled={loading}
           className={`jp-auth-submit ${activeTab === 'login' ? 'jp-auth-submit-login' : 'jp-auth-submit-signup'}`}
         >
@@ -263,7 +264,7 @@ function AuthForm() {
             'CREATE ACCOUNT'
           )}
         </button>
-      </form>
+      </div>
 
       <p className="jp-auth-footer">
         <Icon name="shield-check" size={14} />
@@ -293,7 +294,7 @@ export default function AuthenticatonPortal() {
         <AuthForm />
       </Suspense>
 
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         .jp-auth-page {
           min-height: 100vh;
           background: radial-gradient(circle at top, #1e293b 0%, #07080e 42%, #020617 100%);
@@ -550,7 +551,7 @@ export default function AuthenticatonPortal() {
           align-items: center;
           gap: 8px;
         }
-      `}</style>
+      ` }} />
     </div>
   );
 }
