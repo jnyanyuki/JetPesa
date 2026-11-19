@@ -1,12 +1,12 @@
 # JetPesa ✈️
 
-JetPesa is a modern Aviator-style betting platform built using Next.js, Firebase, PayHero, and Safaricom Daraja STK Push.
+JetPesa is a modern Aviator-style betting platform built using Next.js, Firebase, and PrintPay M-Pesa Integration (C2B & B2C).
 
 The platform features:
 
 - Real-time Aviator gameplay
 - Auto Bet & Auto Cashout
-- M-Pesa deposits via PayHero + Daraja fallback
+- M-Pesa deposits & payouts via PrintPay
 - Firebase Authentication
 - Firestore wallet management
 - Live multiplayer lobby chat
@@ -23,8 +23,7 @@ The platform features:
 - Firebase Authentication
 - Firebase Firestore
 - Firebase Admin SDK
-- Safaricom Daraja API
-- PayHero API
+- PrintPay API (C2B & B2C)
 - Vercel Deployment
 - Canvas API
 - canvas-confetti
@@ -70,15 +69,14 @@ FIREBASE_PROJECT_ID=
 FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=
 
-PAYHERO_API_USERNAME=
-PAYHERO_API_PASSWORD=
-PAYHERO_CHANNEL_ID=
+PRINTPAY_WALLET_ID=RK06FTNUZX5T
+PRINTPAY_PAYBILL=1416998
+PRINTPAY_API_KEY=
+PRINTPAY_SECURITY_CREDENTIAL=
+PRINTPAY_WEBHOOK_SECRET=
 
-MPESA_CONSUMER_KEY=
-MPESA_CONSUMER_SECRET=
-MPESA_STORE_NUMBER=
-MPESA_TILL_NUMBER=
-MPESA_PASSKEY=
+GAME_SERVER_SEED=
+GAME_CLIENT_SEED=jetpesa_client_seed_prod_anchor
 ```
 
 ---
@@ -88,37 +86,22 @@ MPESA_PASSKEY=
 ## 1. Enable Authentication
 
 Enable:
-
 - Email/Password
-- Phone Authentication
+- Phone Authentication (optional/lookup)
 
 Inside Firebase Console.
 
 ---
 
-## 2. Create Firestore Database
+## 2. Deploy Firestore Rules
 
-Use Production Mode.
+Deploy the comprehensive security rules in [firestore.rules](file:///c:/FullStack/JetPesa/firestore.rules):
 
-### Firestore Rules
-
-```js
-rules_version = '2';
-
-service cloud.firestore {
-  match /databases/{database}/documents {
-
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    match /deposits/{depositId} {
-      allow read: if request.auth != null;
-      allow write: if false;
-    }
-  }
-}
+```bash
+firebase deploy --only firestore:rules
 ```
+
+These rules protect user wallets from client tampering, restrict deposits and withdrawals to server-side mutations, and enforce read-only game bets.
 
 ---
 
@@ -138,16 +121,23 @@ FIREBASE_PRIVATE_KEY
 
 ---
 
-# Payment System
+# Payment System (PrintPay PSP)
 
-JetPesa uses:
+JetPesa integrates **PrintPay** for both M-Pesa collections (C2B) and automated payouts (B2C):
 
-1. PayHero as the primary STK gateway
-2. Safaricom Daraja as automatic fallback
+1. **C2B (Deposits)**:
+   - STK Push prompt to user's phone via `POST /api/printpay/c2b`
+   - Manual Paybill support: **Paybill 1416998**, Account **RK06FTNUZX5T**
+   - Live status verification via `GET /api/printpay/c2b-status`
+   - Instant webhook confirmation via `POST /api/printpay/callback`
+   - Wallet balances are credited ONLY after confirmed payment.
 
-Wallet balances are credited ONLY after callback confirmation.
-
-This prevents fake deposits and premature wallet funding.
+2. **B2C (Disbursements / Withdrawals)**:
+   - Automated M-Pesa withdrawal payouts via `POST /api/printpay/b2c-withdraw`
+   - Live payout status tracking via `POST /api/printpay/b2c-status`
+   - Payout result webhook via `POST /api/printpay/b2c-callback`
+   - Atomic balance debit and automatic refund if payout fails at telco.
+   - Merchant float balance check via `GET /api/printpay/b2c-balance`
 
 ---
 

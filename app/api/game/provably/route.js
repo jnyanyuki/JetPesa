@@ -1,92 +1,52 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
+import { getCycleState, getRoundDetails, HOUSE_EDGE } from '../../../../lib/gameEngine';
 
 export const dynamic = 'force-dynamic';
-
-const HOUSE_EDGE = 0.03;
-
-function sha256(value) {
-  return crypto.createHash('sha256').update(value).digest('hex');
-}
-
-function hmacSha256(secret, message) {
-  return crypto.createHmac('sha256', secret).update(message).digest('hex');
-}
-
-function normalizeNonce(value) {
-  const nonce = Number(value);
-
-  if (!Number.isInteger(nonce) || nonce < 1) {
-    throw new Error('Invalid nonce. Nonce must be a positive integer.');
-  }
-
-  return nonce;
-}
-
-function calculateCrashPoint(hash) {
-  // First 52 bits from hash.
-  const hex52 = hash.slice(0, 13);
-  const h = BigInt(`0x${hex52}`);
-  const e = 2n ** 52n;
-
-  // 3% instant crash house edge.
-  if (h % 33n === 0n) {
-    return 1.0;
-  }
-
-  const numerator = 100n * e - h;
-  const denominator = e - h;
-
-  const result = Number(numerator / denominator) / 100;
-
-  return Math.max(1.0, Math.floor(result * 100) / 100);
-}
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
+    const nonce = parseInt(searchParams.get('nonce') || '1', 10);
 
-    const nonce = normalizeNonce(searchParams.get('nonce') || '1');
-
-    const serverSeed = process.env.GAME_SERVER_SEED;
-    const clientSeed =
-      searchParams.get('clientSeed') ||
-      process.env.GAME_CLIENT_SEED ||
-      'jetpesa_client_seed_prod_anchor';
-
-    if (!serverSeed) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Missing GAME_SERVER_SEED environment variable.',
-        },
-        { status: 500 }
-      );
+    if (isNaN(nonce) || nonce < 1) {
+      return NextResponse.json({ success: false, message: 'Invalid nonce.' }, { status: 400 });
     }
 
-    const serverSeedHash = sha256(serverSeed);
-    const roundInput = `${clientSeed}:${nonce}`;
-    const roundHash = hmacSha256(serverSeed, roundInput);
-    const crashPoint = calculateCrashPoint(roundHash);
+    const currentState = getCycleState();
+    const round = getRoundDetails(nonce);
 
+    // If nonce is in the future, or current round has NOT crashed yet:
+    // Keep crashPoint, serverSeed, and roundHash STRICTLY SEALED!
+    const isPastOrCrashed = nonce < currentState.cycleIndex || (nonce === currentState.cycleIndex && currentState.hasCrashed);
+
+    if (!isPastOrCrashed) {
+      return NextResponse.json({
+        success: true,
+        nonce,
+        status: 'sealed',
+        serverSeedHash: round.serverSeedHash,
+        clientSeed: round.clientSeed,
+        algorithm: 'HMAC_SHA256',
+        houseEdge: HOUSE_EDGE,
+        message: 'Crash point is cryptographically sealed until round crash.',
+      });
+    }
+
+    // Past or crashed round: fully reveal for provably fair verification
     return NextResponse.json({
       success: true,
       nonce,
-      clientSeed,
-      serverSeedHash,
-      roundHash,
-      crashPoint,
+      status: 'revealed',
+      serverSeedHash: round.serverSeedHash,
+      roundHash: round.roundHash,
+      crashPoint: round.crashPoint,
+      serverSeed: round.serverSeed,
+      clientSeed: round.clientSeed,
       algorithm: 'HMAC_SHA256',
       houseEdge: HOUSE_EDGE,
-      verifyInput: roundInput,
+      verifyInput: round.roundInput,
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: error.message,
-      },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }

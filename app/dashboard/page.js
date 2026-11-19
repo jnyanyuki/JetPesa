@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '../../firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import confetti from 'canvas-confetti';
 
 const MIN_WAGER = 10;
@@ -128,6 +128,7 @@ export default function UltimateJetPesaCockpit() {
   const [inputPhone, setInputPhone] = useState('');
   const [inputAmount, setInputAmount] = useState('100');
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawPhone, setWithdrawPhone] = useState('');
   const [loadingDeposit, setLoadingDeposit] = useState(false);
   const [loadingWithdraw, setLoadingWithdraw] = useState(false);
 
@@ -138,6 +139,7 @@ export default function UltimateJetPesaCockpit() {
     cashVal: 2.0,
     hasBetNext: false,
     hasBetCurrent: false,
+    currentBetId: null,
   });
 
   const [deckB, setDeckB] = useState({
@@ -147,6 +149,7 @@ export default function UltimateJetPesaCockpit() {
     cashVal: 3.0,
     hasBetNext: false,
     hasBetCurrent: false,
+    currentBetId: null,
   });
 
   const [multiplier, setMultiplier] = useState(1.0);
@@ -183,6 +186,8 @@ export default function UltimateJetPesaCockpit() {
   const lastCycleRef = useRef(null);
   const recordedCrashCycleRef = useRef(null);
   const betNonceRef = useRef(1);
+  const lastStateCheckRef = useRef(0);
+  const queuedBetPendingRef = useRef({ A: false, B: false });
 
   const currentRoundRef = useRef({
     nonce: 1,
@@ -367,11 +372,16 @@ export default function UltimateJetPesaCockpit() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Could not load provably fair round.');
       currentRoundRef.current = {
-        nonce: data.nonce, crashPoint: Number(data.crashPoint || 1),
-        serverSeedHash: data.serverSeedHash, roundHash: data.roundHash,
-        clientSeed: data.clientSeed, algorithm: data.algorithm,
-        verifyInput: data.verifyInput, serverSeed: data.serverSeed || '',
-        houseEdge: Number(data.houseEdge ?? 0.01),
+        nonce: data.nonce,
+        crashPoint: Number(data.crashPoint || 999), // Remains flying until server signals crash
+        serverSeedHash: data.serverSeedHash,
+        roundHash: data.roundHash || 'Cryptographically sealed during flight',
+        clientSeed: data.clientSeed,
+        algorithm: data.algorithm || 'HMAC_SHA256',
+        verifyInput: data.verifyInput || 'Sealed',
+        serverSeed: data.serverSeed || 'Revealed after flight ends',
+        houseEdge: Number(data.houseEdge ?? 0.03),
+        status: data.status,
       };
       setProvablyData(currentRoundRef.current);
       if (openModal) setIsProvablyModalOpen(true);
@@ -398,26 +408,39 @@ export default function UltimateJetPesaCockpit() {
       setInputPhone(savedPhone);
       setPhoneProfile(savedPhone);
       setEditPhone(savedPhone);
+      setWithdrawPhone(savedPhone);
     }
+    let unsubSnapshot = null;
     const unsubscribe = onAuthStateChanged(auth, async (curr) => {
-      if (!curr) { router.push('/'); return; }
-      setUser(curr);
-      const userDoc = await getDoc(doc(db, 'users', curr.uid));
-      if (userDoc.exists()) {
-        const d = userDoc.data();
-        setBalance(d.walletBalance || 0.0);
-        setProfileName(d.displayName || '');
-        setEditName(d.displayName || '');
-        if (!savedPhone && d.mpesaPhone) {
-          setPhoneProfile(d.mpesaPhone);
-          setInputPhone(d.mpesaPhone);
-          setEditPhone(d.mpesaPhone);
-        }
+      if (!curr) {
+        if (unsubSnapshot) unsubSnapshot();
+        router.push('/');
+        return;
       }
+      setUser(curr);
+
+      // Realtime listener: balance is exclusively updated by server transactions
+      unsubSnapshot = onSnapshot(doc(db, 'users', curr.uid), (snap) => {
+        if (snap.exists()) {
+          const d = snap.data();
+          setBalance(Number(d.walletBalance || 0.0));
+          if (d.displayName) setProfileName(d.displayName);
+          if (d.displayName && !editName) setEditName(d.displayName);
+          if (d.mpesaPhone && !savedPhone) {
+            setPhoneProfile(d.mpesaPhone);
+            setInputPhone(d.mpesaPhone);
+            setEditPhone(d.mpesaPhone);
+            setWithdrawPhone(d.mpesaPhone);
+          }
+        }
+      });
     });
     fetchProvablyRound(1);
     startFreshLiveBetsFeed();
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubSnapshot) unsubSnapshot();
+    };
   }, []);
 
   useEffect(() => {
@@ -452,6 +475,7 @@ export default function UltimateJetPesaCockpit() {
 
       if (lastCycleRef.current !== cycleIndex) {
         lastCycleRef.current = cycleIndex;
+        queuedBetPendingRef.current = { A: false, B: false };
         startFreshLiveBetsFeed();
         fetchProvablyRound(cycleIndex + 1);
       }
@@ -466,16 +490,29 @@ export default function UltimateJetPesaCockpit() {
         }
         setCountdownProgress(((countdownInterval - offsetMs) / countdownInterval) * 100);
         if (offsetMs % 1000 < 20) playSynthesizedTone(320, 'sine', 0.03, 0.02);
-        setDeckA((prev) => {
-          if (prev.hasBetNext && !prev.hasBetCurrent) return { ...prev, hasBetCurrent: true, hasBetNext: prev.isAuto };
-          return prev;
-        });
-        setDeckB((prev) => {
-          if (prev.hasBetNext && !prev.hasBetCurrent) return { ...prev, hasBetCurrent: true, hasBetNext: prev.isAuto };
-          return prev;
-        });
+        if (deckA.hasBetNext && !deckA.hasBetCurrent && !queuedBetPendingRef.current.A) {
+          queuedBetPendingRef.current.A = true;
+          placeQueuedBet('A', deckA);
+        }
+        if (deckB.hasBetNext && !deckB.hasBetCurrent && !queuedBetPendingRef.current.B) {
+          queuedBetPendingRef.current.B = true;
+          placeQueuedBet('B', deckB);
+        }
       } else if (offsetMs < countdownInterval + simulationWindow) {
         setGameStatus('running');
+
+        // Periodically sync live round state from server to catch crash points dynamically
+        if (epochTimeMs - lastStateCheckRef.current > 1200) {
+          lastStateCheckRef.current = epochTimeMs;
+          fetch('/api/game/round-state', { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((st) => {
+              if (st?.success && st?.hasCrashed && st?.crashPoint) {
+                currentRoundRef.current.crashPoint = st.crashPoint;
+              }
+            })
+            .catch(() => {});
+        }
         const activeSeconds = (offsetMs - countdownInterval) / 1000;
         const computedMultiplier = parseFloat(Math.pow(Math.E, 0.078 * activeSeconds).toFixed(2));
         if (computedMultiplier >= crashPoint) {
@@ -483,8 +520,8 @@ export default function UltimateJetPesaCockpit() {
           setMultiplier(crashPoint);
           markLiveBetsCrashed();
           persistCrashToHistory(crashPoint, cycleIndex);
-          setDeckA((p) => ({ ...p, hasBetCurrent: false }));
-          setDeckB((p) => ({ ...p, hasBetCurrent: false }));
+          setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
         } else {
           setMultiplier(computedMultiplier);
           updateLiveBetStatuses(computedMultiplier);
@@ -492,14 +529,14 @@ export default function UltimateJetPesaCockpit() {
           setDeckA((p) => {
             if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
               triggerPayoutSequence('A', computedMultiplier, p);
-              return { ...p, hasBetCurrent: false };
+              return { ...p, hasBetCurrent: false, currentBetId: null };
             }
             return p;
           });
           setDeckB((p) => {
             if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
               triggerPayoutSequence('B', computedMultiplier, p);
-              return { ...p, hasBetCurrent: false };
+              return { ...p, hasBetCurrent: false, currentBetId: null };
             }
             return p;
           });
@@ -509,8 +546,8 @@ export default function UltimateJetPesaCockpit() {
         setMultiplier(crashPoint);
         markLiveBetsCrashed();
         persistCrashToHistory(crashPoint, cycleIndex);
-        setDeckA((p) => ({ ...p, hasBetCurrent: false }));
-        setDeckB((p) => ({ ...p, hasBetCurrent: false }));
+        setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+        setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
       }
 
       renderRadarCanvas(offsetMs, countdownInterval);
@@ -660,11 +697,6 @@ export default function UltimateJetPesaCockpit() {
   /* ---------------------------------------------------------------------- */
   /*  Wallet & Profile Logic                                                 */
   /* ---------------------------------------------------------------------- */
-  const commitWalletBalance = async (balTarget) => {
-    if (!user) return;
-    await updateDoc(doc(db, 'users', user.uid), { walletBalance: parseFloat(balTarget.toFixed(2)) });
-  };
-
   const handleProfileUpdate = async () => {
     if (!user) return;
     const cleanPhone = editPhone.trim();
@@ -672,27 +704,79 @@ export default function UltimateJetPesaCockpit() {
       triggerToast('Enter a valid M-Pesa phone number.', 'error');
       return;
     }
-    await updateDoc(doc(db, 'users', user.uid), { displayName: editName.trim(), mpesaPhone: cleanPhone });
-    setProfileName(editName.trim());
-    setPhoneProfile(cleanPhone);
-    setInputPhone(cleanPhone);
-    localStorage.setItem('jetpesa_saved_phone', cleanPhone);
-    setIsProfileModalOpen(false);
-    triggerToast('Profile updated successfully.', 'success');
+    const cleanDisplayName = (editName || '').trim().slice(0, 50);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        displayName: cleanDisplayName,
+        mpesaPhone: cleanPhone,
+      });
+      setProfileName(cleanDisplayName);
+      setPhoneProfile(cleanPhone);
+      setInputPhone(cleanPhone);
+      setWithdrawPhone(cleanPhone);
+      localStorage.setItem('jetpesa_saved_phone', cleanPhone);
+      setIsProfileModalOpen(false);
+      triggerToast('Profile updated successfully.', 'success');
+    } catch (err) {
+      console.error('Failed to update profile:', err);
+      triggerToast('Failed to update profile: ' + (err.message || 'Error occurred'), 'error');
+    }
   };
 
   const handleWithdrawExecution = async () => {
-    const amt = parseInt(withdrawAmount);
+    const amt = parseInt(withdrawAmount, 10);
+    const targetPhone = (withdrawPhone || phoneProfile || inputPhone || '').trim();
     if (isNaN(amt) || amt < 50) { triggerToast('Minimum withdrawal is KES 50.', 'error'); return; }
     if (amt > balance) { triggerToast('Withdrawal exceeds wallet balance.', 'error'); return; }
+    if (!targetPhone) { triggerToast('Please enter an M-Pesa phone number for payout.', 'error'); return; }
+    if (!user?.uid) { triggerToast('Login session expired. Please sign in again.', 'error'); return; }
+
     setLoadingWithdraw(true);
     try {
-      const nextBal = balance - amt;
-      setBalance(nextBal);
-      await commitWalletBalance(nextBal);
+      const token = await user.getIdToken();
+      const res = await fetch('/api/printpay/b2c-withdraw', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ amount: amt, phone: targetPhone }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Withdrawal initiation failed.');
+      }
+
       setWithdrawAmount('');
       setIsWithdrawModalOpen(false);
-      triggerToast(`Withdrawal request submitted: KES ${amt}`, 'success');
+      triggerToast(data.message || `M-Pesa payout of KES ${amt} initiated!`, 'success');
+
+      // Poll B2C status
+      if (data.conversationId) {
+        let attempts = 0;
+        const maxAttempts = 15;
+        const pollB2C = setInterval(async () => {
+          attempts++;
+          try {
+            const statusRes = await fetch('/api/printpay/b2c-status', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ conversationId: data.conversationId, withdrawalId: data.withdrawalId }),
+            });
+            const statusData = await statusRes.json();
+            if (statusData.status === 'completed') {
+              clearInterval(pollB2C);
+              triggerToast(`Withdrawal confirmed! Receipt: ${statusData.receipt || 'M-Pesa confirmed'}`, 'success');
+            } else if (statusData.status === 'failed') {
+              clearInterval(pollB2C);
+              triggerToast(statusData.failureReason || 'Payout failed. Wallet refunded.', 'error');
+            }
+            if (attempts >= maxAttempts) clearInterval(pollB2C);
+          } catch {
+            if (attempts >= maxAttempts) clearInterval(pollB2C);
+          }
+        }, 5000);
+      }
     } catch (e) {
       triggerToast(`Withdrawal failed: ${e.message}`, 'error');
     } finally {
@@ -700,52 +784,147 @@ export default function UltimateJetPesaCockpit() {
     }
   };
 
-  const triggerPayoutSequence = (deckName, multVal, activeState) => {
-    const rawWin = activeState.wager * multVal;
-    const resolvedBalance = balance + rawWin;
-    setBalance(resolvedBalance);
-    commitWalletBalance(resolvedBalance);
-    setMyBetsHistory((p) => [{ roundId: Date.now().toString().slice(-5), stake: activeState.wager, multiplier: multVal, yieldAmount: rawWin, status: 'WON' }, ...p]);
-    playSynthesizedTone(523.25, 'sine', 0.15, 0.05);
-    setTimeout(() => playSynthesizedTone(659.25, 'sine', 0.15, 0.05), 100);
-    setTimeout(() => playSynthesizedTone(783.99, 'sine', 0.3, 0.06), 200);
-    confetti({ particleCount: 90, spread: 65, origin: { y: 0.35 } });
-    triggerToast(`Deck ${deckName} Auto Cashout @ ${multVal}x! +KES ${rawWin.toFixed(2)}`, 'success');
-  };
-
-  const placeWagerIntent = (targetDeck) => {
-    if (balance <= 0) { triggerToast('Wallet reads KES 0.00. Please deposit first.', 'error'); return; }
-    const isA = targetDeck === 'A';
-    const currentWagerAmount = Math.max(MIN_WAGER, Number(isA ? deckA.wager : deckB.wager) || MIN_WAGER);
-    betNonceRef.current++;
-    if (currentWagerAmount < MIN_WAGER) { triggerToast('Minimum wager is KES 10.', 'error'); return; }
-    if (balance < currentWagerAmount) { triggerToast('Selected stake exceeds your available balance.', 'error'); return; }
-    if (gameStatus === 'running') {
-      if (isA) setDeckA((p) => ({ ...p, hasBetNext: !p.hasBetNext }));
-      else setDeckB((p) => ({ ...p, hasBetNext: !p.hasBetNext }));
-      triggerToast(`Deck ${targetDeck} round queue updated.`, 'info');
-    } else {
-      if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: true }));
-      else setDeckB((p) => ({ ...p, hasBetCurrent: true }));
-      setBalance((b) => b - currentWagerAmount);
+  const triggerPayoutSequence = async (deckName, multVal, activeState) => {
+    if (!user || !activeState.hasBetCurrent) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/game/cashout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ deck: deckName, betId: activeState.currentBetId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Auto-cashout missed.');
+      }
+      setMyBetsHistory((p) => [{ roundId: Date.now().toString().slice(-5), stake: activeState.wager, multiplier: data.multiplier, yieldAmount: data.winAmount, status: 'WON' }, ...p]);
+      playSynthesizedTone(523.25, 'sine', 0.15, 0.05);
+      setTimeout(() => playSynthesizedTone(659.25, 'sine', 0.15, 0.05), 100);
+      setTimeout(() => playSynthesizedTone(783.99, 'sine', 0.3, 0.06), 200);
+      confetti({ particleCount: 90, spread: 65, origin: { y: 0.35 } });
+      triggerToast(`Deck ${deckName} Auto Cashout @ ${data.multiplier.toFixed(2)}x! +KES ${data.winAmount.toFixed(2)}`, 'success');
+    } catch (e) {
+      triggerToast(e.message, 'error');
     }
   };
 
-  const handleManualPayoutExecution = (targetDeck) => {
+  const placeQueuedBet = async (deckName, state) => {
+    if (!user) {
+      queuedBetPendingRef.current[deckName] = false;
+      return;
+    }
+    try {
+      const token = await user.getIdToken();
+      const autoCash = state.isAutoCash ? parseFloat(state.cashVal) : null;
+      const res = await fetch('/api/game/bet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ deck: deckName, wager: state.wager, autoCashout: autoCash }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (deckName === 'A') setDeckA((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId, hasBetNext: p.isAuto }));
+        else setDeckB((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId, hasBetNext: p.isAuto }));
+        triggerToast(`Deck ${deckName} auto-stake KES ${state.wager} placed!`, 'success');
+      } else {
+        if (deckName === 'A') setDeckA((p) => ({ ...p, hasBetNext: false }));
+        else setDeckB((p) => ({ ...p, hasBetNext: false }));
+        triggerToast(data.message || `Deck ${deckName} stake failed.`, 'error');
+      }
+    } catch {
+      if (deckName === 'A') setDeckA((p) => ({ ...p, hasBetNext: false }));
+      else setDeckB((p) => ({ ...p, hasBetNext: false }));
+    } finally {
+      queuedBetPendingRef.current[deckName] = false;
+    }
+  };
+
+  const placeWagerIntent = async (targetDeck) => {
+    if (balance <= 0) { triggerToast('Wallet reads KES 0.00. Please deposit first.', 'error'); return; }
     const isA = targetDeck === 'A';
     const targetState = isA ? deckA : deckB;
-    if (!targetState.hasBetCurrent) return;
-    const preciseWin = targetState.wager * multiplier;
-    const updatedWallet = balance + preciseWin;
-    setBalance(updatedWallet);
-    commitWalletBalance(updatedWallet);
-    setMyBetsHistory((p) => [{ roundId: Date.now().toString().slice(-5), stake: targetState.wager, multiplier, yieldAmount: preciseWin, status: 'WON' }, ...p]);
-    if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: false }));
-    else setDeckB((p) => ({ ...p, hasBetCurrent: false }));
-    playSynthesizedTone(587.33, 'sine', 0.12, 0.05);
-    setTimeout(() => playSynthesizedTone(880.0, 'sine', 0.25, 0.05), 110);
-    confetti({ particleCount: 60, spread: 50, origin: { y: 0.4 } });
-    triggerToast(`Manual Cashout Approved! + KES ${preciseWin.toFixed(2)}`, 'success');
+    const currentWagerAmount = Math.max(MIN_WAGER, Number(targetState.wager) || MIN_WAGER);
+    betNonceRef.current++;
+    if (currentWagerAmount < MIN_WAGER) { triggerToast('Minimum wager is KES 10.', 'error'); return; }
+    if (balance < currentWagerAmount) { triggerToast('Selected stake exceeds your available balance.', 'error'); return; }
+    if (!user) { triggerToast('Please sign in to place a wager.', 'error'); return; }
+
+    // If user clicks CANCEL on a queued bet
+    if (targetState.hasBetNext) {
+      if (isA) setDeckA((p) => ({ ...p, hasBetNext: false }));
+      else setDeckB((p) => ({ ...p, hasBetNext: false }));
+      triggerToast(`Deck ${targetDeck} queued wager cancelled.`, 'info');
+      return;
+    }
+
+    // If flight is running, queue for next round
+    if (gameStatus === 'running') {
+      if (isA) setDeckA((p) => ({ ...p, hasBetNext: true }));
+      else setDeckB((p) => ({ ...p, hasBetNext: true }));
+      triggerToast(`Deck ${targetDeck} wager queued for next flight.`, 'info');
+      return;
+    }
+
+    try {
+      const token = await user.getIdToken();
+      const autoCash = targetState.isAutoCash ? parseFloat(targetState.cashVal) : null;
+      const res = await fetch('/api/game/bet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ deck: targetDeck, wager: currentWagerAmount, autoCashout: autoCash }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Wager rejected.');
+      }
+      if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId }));
+      else setDeckB((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId }));
+      triggerToast(`Deck ${targetDeck} wager confirmed: KES ${currentWagerAmount}`, 'success');
+    } catch (e) {
+      triggerToast(e.message, 'error');
+    }
+  };
+
+  const handleManualPayoutExecution = async (targetDeck) => {
+    const isA = targetDeck === 'A';
+    const targetState = isA ? deckA : deckB;
+    if (!targetState.hasBetCurrent || !user) return;
+
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/game/cashout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ deck: targetDeck, betId: targetState.currentBetId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Cashout failed.');
+      }
+      if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+      else setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+      setMyBetsHistory((p) => [{ roundId: Date.now().toString().slice(-5), stake: targetState.wager, multiplier: data.multiplier, yieldAmount: data.winAmount, status: 'WON' }, ...p]);
+      playSynthesizedTone(587.33, 'sine', 0.12, 0.05);
+      setTimeout(() => playSynthesizedTone(880.0, 'sine', 0.25, 0.05), 110);
+      confetti({ particleCount: 60, spread: 50, origin: { y: 0.4 } });
+      triggerToast(`Manual Cashout Approved! + KES ${data.winAmount.toFixed(2)}`, 'success');
+    } catch (e) {
+      if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+      else setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+      triggerToast(e.message, 'error');
+    }
   };
 
   const broadcastChatMessage = () => {
@@ -759,23 +938,23 @@ export default function UltimateJetPesaCockpit() {
   const handlePaymentInitiation = async () => {
     const amt = parseInt(inputAmount, 10);
     const cleanPhone = inputPhone.trim().replace(/\s+/g, '');
-    if (isNaN(amt) || amt < 49) { triggerToast('Minimum deposit is KES 49.', 'error'); return; }
-    if ((!cleanPhone.startsWith('07') && !cleanPhone.startsWith('01')) || cleanPhone.length !== 10) { triggerToast('Enter a valid M-Pesa phone number.', 'error'); return; }
-    if (!user?.uid) { triggerToast('Login session expired. Please sign in again.', 'error'); return; }
-    
-    let formattedPhone = cleanPhone;
-    if (cleanPhone.startsWith('0')) {
-      formattedPhone = '254' + cleanPhone.slice(1);
-    } else if (cleanPhone.startsWith('+')) {
-      formattedPhone = cleanPhone.slice(1);
+    if (isNaN(amt) || amt < 10) { triggerToast('Minimum deposit is KES 10.', 'error'); return; }
+    if ((!cleanPhone.startsWith('07') && !cleanPhone.startsWith('01') && !cleanPhone.startsWith('254') && !cleanPhone.startsWith('+254'))) {
+      triggerToast('Enter a valid Kenyan phone number (e.g. 07XXXXXXXX or 01XXXXXXXX).', 'error');
+      return;
     }
+    if (!user?.uid) { triggerToast('Login session expired. Please sign in again.', 'error'); return; }
     
     setLoadingDeposit(true);
     try {
-      const res = await fetch('/api/payhero', {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/printpay/c2b', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt, phone: formattedPhone, username: user.uid }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ amount: amt, phone: cleanPhone }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Payment initiation failed.');
@@ -786,7 +965,7 @@ export default function UltimateJetPesaCockpit() {
       const poll = setInterval(async () => {
         attempts += 1;
         try {
-          const statusRes = await fetch(`/api/payhero-status?reference=${data.reference}`);
+          const statusRes = await fetch(`/api/printpay/c2b-status?reference=${data.reference}&checkout_id=${data.checkoutId || ''}`);
           const statusData = await statusRes.json();
           if (statusData.status === 'completed') {
             clearInterval(poll);
@@ -794,7 +973,7 @@ export default function UltimateJetPesaCockpit() {
             setBalance(userDoc.exists() ? Number(userDoc.data().walletBalance || 0) : balance);
             setIsDepositModalOpen(false);
             setLoadingDeposit(false);
-            triggerToast(`Deposit confirmed. KES ${amt} added.`, 'success');
+            triggerToast(`Deposit confirmed! KES ${amt} added to wallet.`, 'success');
           }
           if (statusData.status === 'failed') {
             clearInterval(poll);
@@ -813,7 +992,7 @@ export default function UltimateJetPesaCockpit() {
             triggerToast(e.message, 'error');
           }
         }
-      }, 5000);
+      }, 4000);
     } catch (e) {
       setLoadingDeposit(false);
       triggerToast(e.message, 'error');
@@ -1058,10 +1237,16 @@ export default function UltimateJetPesaCockpit() {
         <div className="jp-modal-overlay" onClick={() => setIsDepositModalOpen(false)}>
           <div className="jp-modal-box jp-modal-green" onClick={(e) => e.stopPropagation()}>
             <button className="jp-modal-close" onClick={() => setIsDepositModalOpen(false)}><Icon name="x" size={20} /></button>
-            <h3 className="jp-modal-title" style={{ color: '#22c55e' }}>Safaricom M-Pesa Wire</h3>
-            <div className="jp-modal-field"><label className="jp-modal-label">DEPOSIT QUANTITY (MIN 49 KES)</label><input type="number" value={inputAmount} onChange={(e) => setInputAmount(e.target.value)} className="jp-modal-input" /></div>
-            <div className="jp-modal-field"><label className="jp-modal-label">M-PESA REGISTERED TELEPHONE</label><input type="text" value={inputPhone} onChange={(e) => setInputPhone(e.target.value)} placeholder="07XXXXXXXX" className="jp-modal-input" /></div>
-            <button onClick={handlePaymentInitiation} disabled={loadingDeposit} className="jp-modal-btn jp-btn-green">{loadingDeposit ? 'SYNCHRONIZING...' : 'AUTHORIZE DEPOSIT'}</button>
+            <h3 className="jp-modal-title" style={{ color: '#22c55e' }}>M-Pesa Deposit (PrintPay)</h3>
+            <div className="jp-modal-field"><label className="jp-modal-label">DEPOSIT AMOUNT (MIN 10 KES)</label><input type="number" value={inputAmount} onChange={(e) => setInputAmount(e.target.value)} className="jp-modal-input" /></div>
+            <div className="jp-modal-field"><label className="jp-modal-label">M-PESA REGISTERED PHONE</label><input type="text" value={inputPhone} onChange={(e) => setInputPhone(e.target.value)} placeholder="07XXXXXXXX or 01XXXXXXXX" className="jp-modal-input" /></div>
+            <button onClick={handlePaymentInitiation} disabled={loadingDeposit} className="jp-modal-btn jp-btn-green">{loadingDeposit ? 'SENDING STK PROMPT...' : 'AUTHORIZE STK DEPOSIT'}</button>
+
+            <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: '11px', color: '#94a3b8', lineHeight: '1.6' }}>
+              <div style={{ fontWeight: '700', color: '#f8fafc', marginBottom: '2px' }}>Manual Paybill Instructions:</div>
+              <div>1. Paybill Business No: <strong style={{ color: '#22c55e' }}>1416998</strong></div>
+              <div>2. Account No: <strong style={{ color: '#38bdf8' }}>RK06FTNUZX5T</strong></div>
+            </div>
           </div>
         </div>
       )}
@@ -1085,10 +1270,11 @@ export default function UltimateJetPesaCockpit() {
         <div className="jp-modal-overlay" onClick={() => setIsWithdrawModalOpen(false)}>
           <div className="jp-modal-box jp-modal-orange" onClick={(e) => e.stopPropagation()}>
             <button className="jp-modal-close" onClick={() => setIsWithdrawModalOpen(false)}><Icon name="x" size={20} /></button>
-            <h3 className="jp-modal-title" style={{ color: '#f59e0b' }}>Withdraw Funds</h3>
+            <h3 className="jp-modal-title" style={{ color: '#f59e0b' }}>M-Pesa Payout (B2C)</h3>
             <p className="jp-modal-balance">Available: <strong style={{ color: '#22c55e' }}>KES {balance.toFixed(2)}</strong></p>
-            <div className="jp-modal-field"><label className="jp-modal-label">WITHDRAW AMOUNT</label><input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} placeholder="Minimum 50" className="jp-modal-input" /></div>
-            <button onClick={handleWithdrawExecution} disabled={loadingWithdraw} className="jp-modal-btn jp-btn-orange">{loadingWithdraw ? 'PROCESSING...' : 'WITHDRAW TO M-PESA'}</button>
+            <div className="jp-modal-field"><label className="jp-modal-label">WITHDRAW AMOUNT (MIN 50 KES)</label><input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} placeholder="Minimum 50" className="jp-modal-input" /></div>
+            <div className="jp-modal-field"><label className="jp-modal-label">RECEIVING M-PESA NUMBER</label><input type="text" value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} placeholder="07XXXXXXXX or 01XXXXXXXX" className="jp-modal-input" /></div>
+            <button onClick={handleWithdrawExecution} disabled={loadingWithdraw} className="jp-modal-btn jp-btn-orange">{loadingWithdraw ? 'DISBURSING VIA B2C...' : 'DISBURSE TO M-PESA'}</button>
           </div>
         </div>
       )}
