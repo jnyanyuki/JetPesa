@@ -61,6 +61,8 @@ function AuthForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const [mounted, setMounted] = useState(false);
+
   // Mode: 'login' | 'signup'
   const [activeTab, setActiveTab] = useState('login');
 
@@ -79,6 +81,7 @@ function AuthForm() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const targetTab = searchParams.get('tab');
     if (targetTab === 'signup' || targetTab === 'login') {
       setActiveTab(targetTab);
@@ -214,7 +217,7 @@ function AuthForm() {
   };
 
   return (
-    <div className="jp-auth-card">
+    <div className="jp-auth-card" suppressHydrationWarning>
       {/* Brand Header */}
       <div className="jp-auth-logo-wrap">
         <div className="jp-auth-plane-badge">
@@ -227,7 +230,7 @@ function AuthForm() {
       </div>
 
       {/* Main Mode Tabs: Sign In / Sign Up */}
-      <div className="jp-auth-tabs">
+      <div className="jp-auth-tabs" suppressHydrationWarning>
         <button
           type="button"
           disabled={loading}
@@ -398,6 +401,7 @@ function AuthForm() {
         <button
           type="submit"
           disabled={loading}
+          suppressHydrationWarning
           className={`jp-auth-submit ${activeTab === 'login' ? 'jp-auth-submit-login' : 'jp-auth-submit-signup'}`}
         >
           {loading ? (
