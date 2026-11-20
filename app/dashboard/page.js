@@ -175,7 +175,7 @@ export default function UltimateJetPesaCockpit() {
     }
   }, []);
 
-  const [activePlayersCount, setActivePlayersCount] = useState(3412);
+  const [activePlayersCount, setActivePlayersCount] = useState(250);
   const [liveBetsFeed, setLiveBetsFeed] = useState([]);
 
   const totalLivePlaced = useMemo(() => {
@@ -296,8 +296,9 @@ export default function UltimateJetPesaCockpit() {
   }, [audioMuted]);
 
   const generateFreshLiveBets = useCallback(() => {
-    const px = ['070***', '071***', '072***', '079***', '011***', '074***', '010***'];
-    const count = Math.floor(Math.random() * 6 + 24); // 24 to 30 active pilots
+    const px = ['070***', '071***', '072***', '079***', '011***', '074***', '010***', '075***', '076***', '078***'];
+    // Play in randomized batches of 100 to 200 active players per round
+    const count = Math.floor(Math.random() * 101 + 100);
     const bets = [];
 
     for (let i = 0; i < count; i++) {
@@ -342,7 +343,7 @@ export default function UltimateJetPesaCockpit() {
   const startFreshLiveBetsFeed = useCallback(() => {
     const bets = generateFreshLiveBets();
     setLiveBetsFeed(bets);
-    setActivePlayersCount(Math.floor(Math.random() * 1500 + 3000));
+    setActivePlayersCount(250);
   }, [generateFreshLiveBets]);
 
   const updateLiveBetStatuses = useCallback((currentMultiplier, effectiveCrash = 100) => {
@@ -1223,7 +1224,7 @@ export default function UltimateJetPesaCockpit() {
   const renderLiveBets = () => (
     <div className="jp-panel-scroll">
       <div className="jp-live-table-head">
-        <span>Pilot</span>
+        <span>Pilot ({liveBetsFeed.length})</span>
         <span>Stake</span>
         <span>Status</span>
       </div>
