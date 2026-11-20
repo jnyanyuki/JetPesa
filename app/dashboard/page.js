@@ -295,41 +295,85 @@ export default function UltimateJetPesaCockpit() {
     }
   }, [audioMuted]);
 
-  const makeRandomBet = useCallback(() => {
+  const generateFreshLiveBets = useCallback(() => {
     const px = ['070***', '071***', '072***', '079***', '011***', '074***', '010***'];
-    const id = Math.random().toString(36).substring(2, 8);
-    return {
-      id: `bet-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      seed: id,
-      username: px[Math.floor(Math.random() * px.length)] + Math.floor(Math.random() * 89 + 10),
-      bet: Math.floor(Math.random() * 4800 + 100),
-      mult: parseFloat((Math.random() * 2.8 + 1.05).toFixed(2)),
-      won: Math.random() > 0.58,
-      status: 'queued',
-    };
+    const count = Math.floor(Math.random() * 6 + 24); // 24 to 30 active pilots
+    const bets = [];
+
+    for (let i = 0; i < count; i++) {
+      const id = Math.random().toString(36).substring(2, 8);
+      const rand = Math.random();
+      let target;
+
+      // Realistic distribution starting with lowest multipliers:
+      // ~45% low multipliers (1.04x - 1.28x)
+      // ~30% mid multipliers (1.29x - 2.05x)
+      // ~15% high multipliers (2.06x - 4.50x)
+      // ~10% moonshot multipliers (4.51x - 18.00x)
+      if (rand < 0.45) {
+        target = parseFloat((1.04 + Math.random() * 0.24).toFixed(2));
+      } else if (rand < 0.75) {
+        target = parseFloat((1.29 + Math.random() * 0.76).toFixed(2));
+      } else if (rand < 0.90) {
+        target = parseFloat((2.06 + Math.random() * 2.44).toFixed(2));
+      } else {
+        target = parseFloat((4.51 + Math.random() * 13.49).toFixed(2));
+      }
+
+      const stake = Math.floor(Math.random() * 4500 + 150);
+
+      bets.push({
+        id: `bet-${Date.now()}-${i}-${id}`,
+        seed: id,
+        username: px[Math.floor(Math.random() * px.length)] + Math.floor(Math.random() * 89 + 10),
+        bet: stake,
+        cashoutTarget: target,
+        mult: target,
+        payout: 0,
+        status: 'queued',
+      });
+    }
+
+    // Sort ascending: start with lowest multipliers at the top per round
+    bets.sort((a, b) => a.cashoutTarget - b.cashoutTarget);
+    return bets;
   }, []);
 
   const startFreshLiveBetsFeed = useCallback(() => {
-    setLiveBetsFeed([]);
+    const bets = generateFreshLiveBets();
+    setLiveBetsFeed(bets);
     setActivePlayersCount(Math.floor(Math.random() * 1500 + 3000));
-    let count = 0;
-    const interval = setInterval(() => {
-      count += 1;
-      setLiveBetsFeed((prev) => [makeRandomBet(), ...prev].slice(0, 28));
-      if (count >= 25) clearInterval(interval);
-    }, 120);
-  }, [makeRandomBet]);
+  }, [generateFreshLiveBets]);
 
-  const updateLiveBetStatuses = useCallback((currentMultiplier) => {
-    setLiveBetsFeed((prev) =>
-      prev.map((b) => {
-        if (b.status !== 'queued') return b;
-        if (currentMultiplier >= b.mult && b.won) {
-          return { ...b, status: 'cashed', payout: Math.floor(b.bet * b.mult) };
+  const updateLiveBetStatuses = useCallback((currentMultiplier, effectiveCrash = 100) => {
+    setLiveBetsFeed((prev) => {
+      let changed = false;
+      const next = prev.map((b) => {
+        // If already cashed or lost, keep state
+        if (b.status === 'cashed' || b.status === 'lost') return b;
+
+        // Dynamically cash out in real-time as flight reaches pilot's target
+        if (currentMultiplier >= b.cashoutTarget && b.cashoutTarget <= effectiveCrash) {
+          changed = true;
+          return {
+            ...b,
+            status: 'cashed',
+            payout: Math.floor(b.bet * b.cashoutTarget),
+            mult: b.cashoutTarget,
+          };
         }
-        return { ...b, status: 'flying' };
-      })
-    );
+
+        // Active in flight before reaching cashout target
+        if (b.status !== 'flying') {
+          changed = true;
+          return { ...b, status: 'flying' };
+        }
+
+        return b;
+      });
+
+      return changed ? next : prev;
+    });
   }, []);
 
   const markLiveBetsCrashed = useCallback(() => {
@@ -637,6 +681,7 @@ export default function UltimateJetPesaCockpit() {
             gameStatusRef.current = 'crashed';
             setGameStatus('crashed');
             setMultiplier(effectiveCrash);
+            updateLiveBetStatuses(effectiveCrash, effectiveCrash);
             markLiveBetsCrashed();
             persistCrashToHistory(effectiveCrash, cycleIndex);
             setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
@@ -647,7 +692,7 @@ export default function UltimateJetPesaCockpit() {
               setGameStatus('running');
             }
             setMultiplier(computedMultiplier);
-            updateLiveBetStatuses(computedMultiplier);
+            updateLiveBetStatuses(computedMultiplier, effectiveCrash);
             if (offsetMs % 300 < 20) playSynthesizedTone(200 + computedMultiplier * 15, 'sine', 0.015, 0.012);
             setDeckA((p) => {
               if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
@@ -1190,7 +1235,7 @@ export default function UltimateJetPesaCockpit() {
         </div>
       ) : (
         liveBetsFeed.map((b) => (
-          <div key={b.id} className="jp-live-row">
+          <div key={b.id} className={`jp-live-row ${b.status === 'cashed' ? 'jp-live-row-won' : ''}`}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
               <UserAvatar seed={b.seed} size={26} />
               <div style={{ minWidth: 0 }}>
@@ -1198,7 +1243,16 @@ export default function UltimateJetPesaCockpit() {
                 <span className="jp-live-sub">Round #{currentRoundRef.current.nonce}</span>
               </div>
             </div>
-            <span className="jp-live-stake">{b.bet} KES</span>
+            <div style={{ textAlign: 'right' }}>
+              <span className={`jp-live-stake ${b.status === 'cashed' ? 'jp-stake-won' : ''}`}>
+                {b.status === 'cashed' ? `${(b.payout || Math.floor(b.bet * b.mult)).toLocaleString()} KES` : `${b.bet.toLocaleString()} KES`}
+              </span>
+              {b.status === 'cashed' && (
+                <span style={{ fontSize: '9px', color: '#64748b', display: 'block', fontWeight: '700' }}>
+                  {b.bet.toLocaleString()} KES
+                </span>
+              )}
+            </div>
             {b.status === 'cashed' ? (
               <span className="jp-badge jp-badge-win">{b.mult.toFixed(2)}x</span>
             ) : b.status === 'lost' ? (
@@ -1848,6 +1902,15 @@ export default function UltimateJetPesaCockpit() {
           display: grid; grid-template-columns: 1fr 64px 64px; gap: 6px; align-items: center;
           padding: 7px 8px; background: rgba(15,23,42,0.85); border: 1px solid rgba(255,255,255,0.05);
           border-radius: 10px; font-size: 11px; margin-bottom: 5px;
+          transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .jp-live-row-won {
+          background: rgba(34, 197, 94, 0.08) !important;
+          border-color: rgba(34, 197, 94, 0.28) !important;
+        }
+        .jp-stake-won {
+          color: #4ade80 !important;
+          font-weight: 950;
         }
         .jp-live-user { display: block; color: #e2e8f0; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
         .jp-live-sub { display: block; color: #475569; font-size: 8px; font-weight: 800; margin-top: 1px; }
