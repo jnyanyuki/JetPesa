@@ -14,6 +14,9 @@ export default function JetPesaAdminPage() {
   const [roundsData, setRoundsData] = useState([]);
   const [pastRoundsData, setPastRoundsData] = useState([]);
   const [inFlightStats, setInFlightStats] = useState(null);
+  const [dailyStats, setDailyStats] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dailyTab, setDailyTab] = useState('summary'); // 'summary' | 'payins' | 'payouts'
   const [currentCycleState, setCurrentCycleState] = useState(null);
   const [usersData, setUsersData] = useState([]);
   const [userSearch, setUserSearch] = useState('');
@@ -81,21 +84,23 @@ export default function JetPesaAdminPage() {
     return fetch(url, { ...options, headers });
   }, []);
 
-  // Fetch Radar (Current + Next 6 Rounds + Last 5 Past Rounds)
-  const loadRoundsRadar = useCallback(async () => {
+  // Fetch Radar (Current + Next 6 Rounds + Last 5 Past Rounds + Daily Stats)
+  const loadRoundsRadar = useCallback(async (dateParam) => {
     try {
-      const res = await adminFetch('/api/admin/rounds?count=6&pastCount=5');
+      const targetDate = dateParam || selectedDate;
+      const res = await adminFetch(`/api/admin/rounds?count=6&pastCount=5&date=${encodeURIComponent(targetDate)}`);
       const data = await res.json();
       if (data.success) {
         setRoundsData(data.rounds || []);
         setPastRoundsData(data.pastRounds || []);
         setCurrentCycleState(data.currentState || null);
         if (data.inFlightStats) setInFlightStats(data.inFlightStats);
+        if (data.dailyStats) setDailyStats(data.dailyStats);
       }
     } catch (e) {
       console.warn('Radar error:', e);
     }
-  }, [adminFetch]);
+  }, [adminFetch, selectedDate]);
 
   // Fetch Overview Stats
   const loadOverview = useCallback(async () => {
@@ -430,149 +435,306 @@ export default function JetPesaAdminPage() {
               )}
             </section>
 
-            {/* Live In-Flight Statistics (Real Pilots & Wagers) */}
-            <section className="jp-admin-panel jp-inflight-section">
-              <div className="jp-panel-header">
-                <div className="jp-history-strip-title">
-                  <span className="jp-history-clock-icon">🛩️</span>
-                  <div>
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      In-Flight Telemetry: Round #{inFlightStats?.roundId || currentCycleState?.currentCycleIndex || currentCycleState?.cycleIndex || '—'}
-                      {inFlightStats?.isBettingPhase ? (
-                        <span className="jp-status-pill pill-active">⏱ COUNTDOWN PHASE</span>
-                      ) : inFlightStats?.hasCrashed ? (
-                        <span className="jp-status-pill pill-crashed">✕ FLEW AWAY @ {inFlightStats?.crashPoint?.toFixed(2)}x</span>
-                      ) : (
-                        <span className="jp-status-pill pill-live">● IN FLIGHT @ {(inFlightStats?.multiplier || currentCycleState?.currentMultiplier || 1.0).toFixed(2)}x</span>
-                      )}
-                    </h3>
+            {/* Middle Row: Minimized In-Flight Telemetry (Left) + Daily Platform Financials & Pay-Ins/Payouts (Right) */}
+            <div className="jp-middle-split-row">
+              {/* LEFT: Minimized In-Flight Telemetry */}
+              <section className="jp-admin-panel jp-inflight-min-panel">
+                <div className="jp-panel-header">
+                  <div className="jp-history-strip-title">
+                    <span className="jp-history-clock-icon">🛩️</span>
+                    <div>
+                      <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        Round #{inFlightStats?.roundId || currentCycleState?.currentCycleIndex || '—'}
+                        {inFlightStats?.isBettingPhase ? (
+                          <span className="jp-status-pill pill-active">⏱ COUNTDOWN</span>
+                        ) : inFlightStats?.hasCrashed ? (
+                          <span className="jp-status-pill pill-crashed">✕ CRASHED @ {inFlightStats?.crashPoint?.toFixed(2)}x</span>
+                        ) : (
+                          <span className="jp-status-pill pill-live">● FLYING @ {(inFlightStats?.multiplier || currentCycleState?.currentMultiplier || 1.0).toFixed(2)}x</span>
+                        )}
+                      </h3>
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className="jp-tag-natural" style={{ fontSize: '9.5px', color: '#38bdf8' }}>
-                    🛡️ Verified Real Pilots Only
+                  <span className="jp-tag-natural" style={{ fontSize: '8.5px', color: '#38bdf8' }}>
+                    Real Pilots
                   </span>
-                  <span className="jp-panel-note">Live updating every 2.5s</span>
                 </div>
-              </div>
 
-              {/* In-Flight KPIs Grid */}
-              <div className="jp-inflight-kpi-grid">
-                <div className="jp-inflight-kpi-card">
-                  <span className="jp-kpi-sublabel">REAL PILOTS</span>
-                  <div className="jp-kpi-val text-white">
-                    {inFlightStats?.totalPilots || 0}
+                {/* Minimized KPIs: 2x2 grid */}
+                <div className="jp-inflight-kpi-grid-min">
+                  <div className="jp-inflight-kpi-card">
+                    <span className="jp-kpi-sublabel">REAL PILOTS</span>
+                    <div className="jp-kpi-val text-white" style={{ fontSize: '15px' }}>
+                      {inFlightStats?.totalPilots || 0}
+                    </div>
+                    <small>{inFlightStats?.activePilots || 0} flying • {inFlightStats?.cashedOutPilots || 0} won</small>
                   </div>
-                  <small>{inFlightStats?.activePilots || 0} in flight • {inFlightStats?.cashedOutPilots || 0} cashed out</small>
-                </div>
 
-                <div className="jp-inflight-kpi-card">
-                  <span className="jp-kpi-sublabel">TOTAL REAL WAGERED</span>
-                  <div className="jp-kpi-val text-amber">
-                    KES {(inFlightStats?.totalStaked || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <div className="jp-inflight-kpi-card">
+                    <span className="jp-kpi-sublabel">REAL WAGERED</span>
+                    <div className="jp-kpi-val text-amber" style={{ fontSize: '15px' }}>
+                      KES {(inFlightStats?.totalStaked || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                    <small>Active: KES {(inFlightStats?.activeStaked || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</small>
                   </div>
-                  <small>Active stakes: KES {(inFlightStats?.activeStaked || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</small>
-                </div>
 
-                <div className="jp-inflight-kpi-card">
-                  <span className="jp-kpi-sublabel">REAL PAYOUTS WON</span>
-                  <div className="jp-kpi-val text-green">
-                    KES {(inFlightStats?.totalWon || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <div className="jp-inflight-kpi-card">
+                    <span className="jp-kpi-sublabel">REAL PAYOUTS WON</span>
+                    <div className="jp-kpi-val text-green" style={{ fontSize: '15px' }}>
+                      KES {(inFlightStats?.totalWon || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                    <small>{inFlightStats?.cashedOutPilots || 0} cashed out</small>
                   </div>
-                  <small>{inFlightStats?.cashedOutPilots || 0} pilots cashed out</small>
-                </div>
 
-                <div className="jp-inflight-kpi-card">
-                  <span className="jp-kpi-sublabel">NET HOUSE RESULT (ROUND)</span>
-                  <div className={`jp-kpi-val ${(inFlightStats?.netHouseMargin || 0) >= 0 ? 'text-cyan' : 'text-rose'}`}>
-                    {(inFlightStats?.netHouseMargin || 0) >= 0 ? '+' : ''}KES {(inFlightStats?.netHouseMargin || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <div className="jp-inflight-kpi-card">
+                    <span className="jp-kpi-sublabel">HOUSE NET ROUND</span>
+                    <div className={`jp-kpi-val ${(inFlightStats?.netHouseMargin || 0) >= 0 ? 'text-cyan' : 'text-rose'}`} style={{ fontSize: '15px' }}>
+                      {(inFlightStats?.netHouseMargin || 0) >= 0 ? '+' : ''}KES {(inFlightStats?.netHouseMargin || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                    <small>{(inFlightStats?.netHouseMargin || 0) >= 0 ? 'House Profit' : 'House Deficit'}</small>
                   </div>
-                  <small>{(inFlightStats?.netHouseMargin || 0) >= 0 ? 'House in Profit' : 'House in Deficit'}</small>
                 </div>
-              </div>
 
-              {/* Real Pilots Active Ledger */}
-              {(!inFlightStats?.bets || inFlightStats.bets.length === 0) ? (
-                <div className="jp-inflight-empty">
-                  <span style={{ fontSize: '18px', display: 'block', marginBottom: '6px' }}>📡</span>
-                  <strong>No real pilot wagers in Round #{inFlightStats?.roundId || currentCycleState?.currentCycleIndex || currentCycleState?.cycleIndex}</strong>
-                  <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '10.5px' }}>
-                    Real pilots who wager via funded M-Pesa balances on Deck A or Deck B will automatically stream live here with live cash-out metrics.
-                  </p>
+                {/* Real Pilots Scrollable Stream */}
+                {(!inFlightStats?.bets || inFlightStats.bets.length === 0) ? (
+                  <div className="jp-inflight-empty-min">
+                    <span>📡 Listening for real pilot wagers in Round #{inFlightStats?.roundId || currentCycleState?.currentCycleIndex}...</span>
+                  </div>
+                ) : (
+                  <div className="jp-table-wrap jp-inflight-scroll">
+                    <table className="jp-admin-table">
+                      <thead>
+                        <tr>
+                          <th>Pilot</th>
+                          <th>Deck</th>
+                          <th>Stake</th>
+                          <th>Multiplier</th>
+                          <th>Status</th>
+                          <th>Return</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inFlightStats.bets.map((bet) => {
+                          const isFlying = bet.status === 'ACTIVE' && !inFlightStats.hasCrashed && !inFlightStats.isBettingPhase;
+                          const curValue = isFlying ? (bet.stake * (inFlightStats.multiplier || 1.0)) : bet.winAmount;
+                          return (
+                            <tr key={bet.id}>
+                              <td><strong>{bet.userPhone || bet.userName}</strong></td>
+                              <td><span className="jp-deck-pill">D-{bet.deck}</span></td>
+                              <td>KES {bet.stake.toFixed(2)}</td>
+                              <td>
+                                {bet.multiplier ? (
+                                  <span className="jp-table-mult text-green">{bet.multiplier.toFixed(2)}x</span>
+                                ) : isFlying ? (
+                                  <span className="jp-table-mult text-amber">{(inFlightStats.multiplier || 1.0).toFixed(2)}x</span>
+                                ) : (
+                                  <span style={{ color: '#64748b' }}>—</span>
+                                )}
+                              </td>
+                              <td>
+                                {bet.status === 'WON' ? (
+                                  <span className="jp-status-pill pill-won">CASHED</span>
+                                ) : bet.status === 'CRASHED' || bet.status === 'LOST' ? (
+                                  <span className="jp-status-pill pill-crashed">CRASHED</span>
+                                ) : isFlying ? (
+                                  <span className="jp-status-pill pill-live">FLYING</span>
+                                ) : (
+                                  <span className="jp-status-pill pill-active">WAIT</span>
+                                )}
+                              </td>
+                              <td>
+                                {bet.status === 'WON' ? (
+                                  <span style={{ color: '#22c55e', fontWeight: 900 }}>+{bet.winAmount.toFixed(2)}</span>
+                                ) : isFlying ? (
+                                  <span style={{ color: '#fbbf24', fontWeight: 800 }}>Est. {curValue.toFixed(2)}</span>
+                                ) : (
+                                  <span style={{ color: '#f43f5e' }}>-{bet.stake.toFixed(2)}</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              {/* RIGHT: Daily Statistics & Real Pay-Ins / Payouts */}
+              <section className="jp-admin-panel jp-daily-panel">
+                <div className="jp-panel-header">
+                  <div className="jp-history-strip-title">
+                    <span className="jp-history-clock-icon">💳</span>
+                    <div>
+                      <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        Daily Performance & Real M-Pesa Flow
+                      </h3>
+                    </div>
+                  </div>
+
+                  {/* Date Selector & Today Pill */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => {
+                        const newDate = e.target.value;
+                        setSelectedDate(newDate);
+                        loadRoundsRadar(newDate);
+                      }}
+                      className="jp-date-picker-input"
+                    />
+                    {!dailyStats?.isToday && (
+                      <button
+                        className="jp-sm-btn"
+                        style={{ background: 'rgba(56, 189, 248, 0.15)', borderColor: '#38bdf8', color: '#38bdf8' }}
+                        onClick={() => {
+                          const today = new Date().toISOString().split('T')[0];
+                          setSelectedDate(today);
+                          loadRoundsRadar(today);
+                        }}
+                      >
+                        Today ↩
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <div className="jp-table-wrap" style={{ marginTop: '12px' }}>
-                  <table className="jp-admin-table">
-                    <thead>
-                      <tr>
-                        <th>Pilot</th>
-                        <th>Deck</th>
-                        <th>Stake</th>
-                        <th>Target Auto Cashout</th>
-                        <th>Flight Multiplier</th>
-                        <th>Status</th>
-                        <th>Payout / Return</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inFlightStats.bets.map((bet) => {
-                        const isFlying = bet.status === 'ACTIVE' && !inFlightStats.hasCrashed && !inFlightStats.isBettingPhase;
-                        const curValue = isFlying ? (bet.stake * (inFlightStats.multiplier || 1.0)) : bet.winAmount;
-                        return (
-                          <tr key={bet.id}>
-                            <td>
-                              <strong>{bet.userPhone || bet.userName}</strong>
-                            </td>
-                            <td>
-                              <span className="jp-deck-pill">Deck {bet.deck}</span>
-                            </td>
-                            <td>
-                              <strong>KES {bet.stake.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
-                            </td>
-                            <td>
-                              {bet.autoCashout ? (
-                                <span style={{ color: '#38bdf8', fontWeight: 800 }}>{bet.autoCashout.toFixed(2)}x</span>
-                              ) : (
-                                <span style={{ color: '#64748b' }}>Manual</span>
-                              )}
-                            </td>
-                            <td>
-                              {bet.multiplier ? (
-                                <span className="jp-table-mult text-green">{bet.multiplier.toFixed(2)}x</span>
-                              ) : isFlying ? (
-                                <span className="jp-table-mult text-amber">{(inFlightStats.multiplier || 1.0).toFixed(2)}x</span>
-                              ) : (
-                                <span style={{ color: '#64748b' }}>—</span>
-                              )}
-                            </td>
-                            <td>
-                              {bet.status === 'WON' ? (
-                                <span className="jp-status-pill pill-won">✓ CASHED OUT</span>
-                              ) : bet.status === 'CRASHED' || bet.status === 'LOST' ? (
-                                <span className="jp-status-pill pill-crashed">✕ CRASHED</span>
-                              ) : isFlying ? (
-                                <span className="jp-status-pill pill-live">● FLYING</span>
-                              ) : (
-                                <span className="jp-status-pill pill-active">⏱ WAITING TAKEOFF</span>
-                              )}
-                            </td>
-                            <td>
-                              {bet.status === 'WON' ? (
-                                <span style={{ color: '#22c55e', fontWeight: 900 }}>+KES {bet.winAmount.toFixed(2)}</span>
-                              ) : isFlying ? (
-                                <span style={{ color: '#fbbf24', fontWeight: 800 }}>Est. KES {curValue.toFixed(2)}</span>
-                              ) : (
-                                <span style={{ color: '#f43f5e', fontWeight: 700 }}>-KES {bet.stake.toFixed(2)}</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+
+                {/* 4 Financial KPIs in 2x2 Grid */}
+                <div className="jp-inflight-kpi-grid-min">
+                  <div className="jp-inflight-kpi-card" style={{ borderLeft: '3px solid #22c55e' }}>
+                    <span className="jp-kpi-sublabel">REAL PAY-INS (DEPOSITS)</span>
+                    <div className="jp-kpi-val text-green" style={{ fontSize: '15px' }}>
+                      KES {(dailyStats?.depositsTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <small>{dailyStats?.depositsCount || 0} M-Pesa payments</small>
+                  </div>
+
+                  <div className="jp-inflight-kpi-card" style={{ borderLeft: '3px solid #f43f5e' }}>
+                    <span className="jp-kpi-sublabel">REAL PAYOUTS (WITHDRAWALS)</span>
+                    <div className="jp-kpi-val text-rose" style={{ fontSize: '15px' }}>
+                      KES {(dailyStats?.withdrawalsTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <small>{dailyStats?.withdrawalsCount || 0} completed payouts</small>
+                  </div>
+
+                  <div className="jp-inflight-kpi-card" style={{ borderLeft: `3px solid ${(dailyStats?.netCashflow || 0) >= 0 ? '#38bdf8' : '#f43f5e'}` }}>
+                    <span className="jp-kpi-sublabel">NET CASHFLOW (IN - OUT)</span>
+                    <div className={`jp-kpi-val ${(dailyStats?.netCashflow || 0) >= 0 ? 'text-cyan' : 'text-rose'}`} style={{ fontSize: '15px' }}>
+                      {(dailyStats?.netCashflow || 0) >= 0 ? '+' : ''}KES {(dailyStats?.netCashflow || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <small>{(dailyStats?.netCashflow || 0) >= 0 ? 'Net Inflow Surplus' : 'Net Outflow Deficit'}</small>
+                  </div>
+
+                  <div className="jp-inflight-kpi-card" style={{ borderLeft: '3px solid #fbbf24' }}>
+                    <span className="jp-kpi-sublabel">GAMING GROSS REVENUE (GGR)</span>
+                    <div className="jp-kpi-val text-amber" style={{ fontSize: '15px' }}>
+                      KES {(dailyStats?.grossGamingRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <small>Wagered: KES {(dailyStats?.wageredTotal || 0).toFixed(0)} • Won: KES {(dailyStats?.wonTotal || 0).toFixed(0)}</small>
+                  </div>
                 </div>
-              )}
-            </section>
+
+                {/* Sub-tabs / Mini transactions stream */}
+                <div style={{ marginTop: '10px' }}>
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                    <button
+                      className={`jp-mini-tab-btn ${dailyTab === 'summary' ? 'active' : ''}`}
+                      onClick={() => setDailyTab('summary')}
+                    >
+                      Summary View
+                    </button>
+                    <button
+                      className={`jp-mini-tab-btn ${dailyTab === 'payins' ? 'active' : ''}`}
+                      onClick={() => setDailyTab('payins')}
+                    >
+                      Pay-Ins ({dailyStats?.recentPayIns?.length || 0})
+                    </button>
+                    <button
+                      className={`jp-mini-tab-btn ${dailyTab === 'payouts' ? 'active' : ''}`}
+                      onClick={() => setDailyTab('payouts')}
+                    >
+                      Payouts ({dailyStats?.recentPayouts?.length || 0})
+                    </button>
+                  </div>
+
+                  {dailyTab === 'summary' && (
+                    <div className="jp-daily-summary-box">
+                      <div className="jp-summary-line">
+                        <span>Active Betting Rounds:</span>
+                        <strong>{dailyStats?.betsCount || 0} real wagers recorded</strong>
+                      </div>
+                      <div className="jp-summary-line">
+                        <span>Total Real Money Cycled:</span>
+                        <strong>KES {((dailyStats?.depositsTotal || 0) + (dailyStats?.withdrawalsTotal || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+                      </div>
+                      <div className="jp-summary-line">
+                        <span>Date Query:</span>
+                        <code style={{ color: '#38bdf8' }}>{dailyStats?.date || selectedDate} {dailyStats?.isToday ? '(Today)' : ''}</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {dailyTab === 'payins' && (
+                    (!dailyStats?.recentPayIns || dailyStats.recentPayIns.length === 0) ? (
+                      <div className="jp-inflight-empty-min">No M-Pesa pay-ins found for {selectedDate}.</div>
+                    ) : (
+                      <div className="jp-table-wrap jp-inflight-scroll">
+                        <table className="jp-admin-table">
+                          <thead>
+                            <tr>
+                              <th>Receipt</th>
+                              <th>User</th>
+                              <th>Amount</th>
+                              <th>Time</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dailyStats.recentPayIns.map((p) => (
+                              <tr key={p.id}>
+                                <td><code style={{ color: '#a7f3d0' }}>{p.receipt || p.id.slice(0, 8)}</code></td>
+                                <td>{p.phone}</td>
+                                <td><strong className="text-green">+KES {p.amount.toFixed(2)}</strong></td>
+                                <td><span className="jp-history-ago">{new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  )}
+
+                  {dailyTab === 'payouts' && (
+                    (!dailyStats?.recentPayouts || dailyStats.recentPayouts.length === 0) ? (
+                      <div className="jp-inflight-empty-min">No M-Pesa payouts found for {selectedDate}.</div>
+                    ) : (
+                      <div className="jp-table-wrap jp-inflight-scroll">
+                        <table className="jp-admin-table">
+                          <thead>
+                            <tr>
+                              <th>Receipt / ID</th>
+                              <th>Recipient</th>
+                              <th>Amount</th>
+                              <th>Time</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dailyStats.recentPayouts.map((w) => (
+                              <tr key={w.id}>
+                                <td><code style={{ color: '#fecdd3' }}>{w.receipt || w.id.slice(0, 8)}</code></td>
+                                <td>{w.phone}</td>
+                                <td><strong className="text-rose">-KES {w.amount.toFixed(2)}</strong></td>
+                                <td><span className="jp-history-ago">{new Date(w.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  )}
+                </div>
+              </section>
+            </div>
 
             {/* Flight Departure Schedule (Next 6 Rounds) */}
             <section className="jp-admin-history-strip">
@@ -1130,12 +1292,26 @@ export default function JetPesaAdminPage() {
         .jp-tag-natural-sm { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 1px 5px; border-radius: 4px; font-size: 8px; font-weight: 700; }
         .jp-history-empty { text-align: center; padding: 14px; color: #64748b; font-size: 11px; }
 
-        /* In-flight real pilots telemetry */
-        .jp-inflight-section { margin-bottom: 18px; border: 1px solid rgba(56, 189, 248, 0.2); background: radial-gradient(circle at top left, rgba(14, 165, 233, 0.05) 0%, rgba(15, 23, 42, 0.75) 100%); }
-        .jp-inflight-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
+        /* Middle Row: Side-by-side split (In-Flight Minimized + Daily Financials) */
+        .jp-middle-split-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; align-items: stretch; }
+        @media (max-width: 980px) {
+          .jp-middle-split-row { grid-template-columns: 1fr; }
+        }
+        .jp-inflight-min-panel { display: flex; flex-direction: column; border: 1px solid rgba(56, 189, 248, 0.2); background: radial-gradient(circle at top left, rgba(14, 165, 233, 0.04) 0%, rgba(15, 23, 42, 0.75) 100%); }
+        .jp-daily-panel { display: flex; flex-direction: column; border: 1px solid rgba(168, 85, 247, 0.2); background: radial-gradient(circle at top right, rgba(168, 85, 247, 0.04) 0%, rgba(15, 23, 42, 0.75) 100%); }
+        .jp-inflight-kpi-grid-min { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
         .jp-inflight-kpi-card { background: rgba(4, 7, 15, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 14px; }
         .jp-kpi-sublabel { font-size: 8.5px; font-weight: 800; color: #94a3b8; letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
-        .jp-inflight-empty { text-align: center; padding: 20px 16px; background: rgba(4, 7, 15, 0.4); border: 1px dashed rgba(255, 255, 255, 0.1); border-radius: 10px; margin-top: 12px; }
+        .jp-inflight-empty-min { text-align: center; padding: 16px 12px; background: rgba(4, 7, 15, 0.4); border: 1px dashed rgba(255, 255, 255, 0.08); border-radius: 8px; font-size: 10px; color: #64748b; margin-top: 8px; }
+        .jp-inflight-scroll { max-height: 140px; overflow-y: auto; margin-top: 8px; }
+        .jp-date-picker-input { background: #090d16; border: 1px solid rgba(255, 255, 255, 0.12); color: #cbd5e1; font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 6px; outline: none; }
+        .jp-mini-tab-btn { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); color: #94a3b8; font-size: 9.5px; font-weight: 800; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+        .jp-mini-tab-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+        .jp-mini-tab-btn.active { background: #1e293b; color: #fff; border-color: rgba(255, 255, 255, 0.2); }
+        .jp-daily-summary-box { background: rgba(4, 7, 15, 0.4); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 10.5px; }
+        .jp-summary-line { display: flex; justify-content: space-between; align-items: center; }
+        .jp-summary-line span { color: #94a3b8; }
+        .jp-summary-line strong { color: #f8fafc; font-weight: 800; }
 
         /* Panels & Tables */
         .jp-admin-panel { background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 16px 18px; backdrop-filter: blur(10px); }

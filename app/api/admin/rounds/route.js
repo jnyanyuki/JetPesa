@@ -136,10 +136,117 @@ export async function GET(request) {
       console.warn('Could not load in-flight bets:', err.message);
     }
 
+    // Fetch daily statistics (pay-ins, payouts, wagers, GGR) for selected date
+    const rawDate = searchParams.get('date');
+    const safeDate = (rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate))
+      ? rawDate
+      : new Date().toISOString().split('T')[0];
+
+    let dailyStats = {
+      date: safeDate,
+      isToday: safeDate === new Date().toISOString().split('T')[0],
+      depositsCount: 0,
+      depositsTotal: 0,
+      withdrawalsCount: 0,
+      withdrawalsTotal: 0,
+      netCashflow: 0,
+      betsCount: 0,
+      wageredTotal: 0,
+      wonTotal: 0,
+      grossGamingRevenue: 0,
+      recentPayIns: [],
+      recentPayouts: [],
+    };
+
+    try {
+      const depositsRow = await sql.query(`
+        SELECT 
+          COUNT(*)::int AS count,
+          COALESCE(SUM(amount), 0)::numeric AS total
+        FROM public.deposits
+        WHERE status = 'COMPLETED' AND DATE(created_at) = DATE('${safeDate}')
+      `);
+
+      const withdrawalsRow = await sql.query(`
+        SELECT 
+          COUNT(*)::int AS count,
+          COALESCE(SUM(amount), 0)::numeric AS total
+        FROM public.withdrawals
+        WHERE status = 'COMPLETED' AND DATE(created_at) = DATE('${safeDate}')
+      `);
+
+      const betsRow = await sql.query(`
+        SELECT 
+          COUNT(*)::int AS count,
+          COALESCE(SUM(stake), 0)::numeric AS wagered,
+          COALESCE(SUM(win_amount), 0)::numeric AS won
+        FROM public.bets
+        WHERE DATE(created_at) = DATE('${safeDate}')
+      `);
+
+      const recentPayIns = await sql.query(`
+        SELECT 
+          d.id, d.user_id, d.amount, d.phone, d.mpesa_receipt, d.status, d.created_at,
+          u.display_name AS user_name
+        FROM public.deposits d
+        LEFT JOIN public.users u ON d.user_id = u.id
+        WHERE d.status = 'COMPLETED' AND DATE(d.created_at) = DATE('${safeDate}')
+        ORDER BY d.created_at DESC
+        LIMIT 5
+      `);
+
+      const recentPayouts = await sql.query(`
+        SELECT 
+          w.id, w.user_id, w.amount, w.phone, w.receipt, w.status, w.created_at,
+          u.display_name AS user_name
+        FROM public.withdrawals w
+        LEFT JOIN public.users u ON w.user_id = u.id
+        WHERE w.status = 'COMPLETED' AND DATE(w.created_at) = DATE('${safeDate}')
+        ORDER BY w.created_at DESC
+        LIMIT 5
+      `);
+
+      const depTotal = Number(depositsRow[0]?.total || 0);
+      const withTotal = Number(withdrawalsRow[0]?.total || 0);
+      const wagTotal = Number(betsRow[0]?.wagered || 0);
+      const wonTotal = Number(betsRow[0]?.won || 0);
+
+      dailyStats = {
+        date: safeDate,
+        isToday: safeDate === new Date().toISOString().split('T')[0],
+        depositsCount: Number(depositsRow[0]?.count || 0),
+        depositsTotal: depTotal,
+        withdrawalsCount: Number(withdrawalsRow[0]?.count || 0),
+        withdrawalsTotal: withTotal,
+        netCashflow: depTotal - withTotal,
+        betsCount: Number(betsRow[0]?.count || 0),
+        wageredTotal: wagTotal,
+        wonTotal,
+        grossGamingRevenue: wagTotal - wonTotal,
+        recentPayIns: recentPayIns.map((d) => ({
+          id: d.id,
+          phone: d.phone ? d.phone.slice(0, 4) + '***' + d.phone.slice(-3) : 'M-Pesa User',
+          amount: Number(d.amount || 0),
+          receipt: d.mpesa_receipt,
+          createdAt: d.created_at,
+        })),
+        recentPayouts: recentPayouts.map((w) => ({
+          id: w.id,
+          phone: w.phone ? w.phone.slice(0, 4) + '***' + w.phone.slice(-3) : 'M-Pesa User',
+          amount: Number(w.amount || 0),
+          receipt: w.receipt,
+          createdAt: w.created_at,
+        })),
+      };
+    } catch (err) {
+      console.warn('Could not load daily stats:', err.message);
+    }
+
     return NextResponse.json({
       success: true,
       ...data,
       inFlightStats,
+      dailyStats,
     });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
