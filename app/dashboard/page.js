@@ -175,8 +175,15 @@ export default function UltimateJetPesaCockpit() {
     }
   }, []);
 
-  const [activePlayersCount, setActivePlayersCount] = useState(250);
+  const [activePlayersCount, setActivePlayersCount] = useState(24);
   const [liveBetsFeed, setLiveBetsFeed] = useState([]);
+
+  const displayActivePlayers = useMemo(() => {
+    let count = activePlayersCount;
+    if (deckA.hasBetCurrent) count += 1;
+    if (deckB.hasBetCurrent) count += 1;
+    return count;
+  }, [activePlayersCount, deckA.hasBetCurrent, deckB.hasBetCurrent]);
 
   const totalLivePlaced = useMemo(() => {
     let sum = liveBetsFeed.reduce((acc, b) => acc + (Number(b.bet) || 0), 0);
@@ -217,6 +224,9 @@ export default function UltimateJetPesaCockpit() {
   const betNonceRef = useRef(1);
   const lastStateCheckRef = useRef(0);
   const queuedBetPendingRef = useRef({ A: false, B: false });
+  const roundPoolBetsRef = useRef([]);
+  const liveBetsFeedRef = useRef([]);
+  const lastBetFeedUpdateRef = useRef(0);
 
   const currentRoundRef = useRef({
     nonce: 1,
@@ -297,7 +307,7 @@ export default function UltimateJetPesaCockpit() {
 
   const generateFreshLiveBets = useCallback(() => {
     const px = ['070***', '071***', '072***', '079***', '011***', '074***', '010***', '075***', '076***', '078***'];
-    // Play in randomized batches of 100 to 200 active players per round
+    // System capacity is 250; play active wagers in randomized batches of 100 to 200 per round
     const count = Math.floor(Math.random() * 101 + 100);
     const bets = [];
 
@@ -323,6 +333,13 @@ export default function UltimateJetPesaCockpit() {
 
       const stake = Math.floor(Math.random() * 4500 + 150);
 
+      // Stagger joinedAtMs across the 5000ms countdown:
+      // ~18% are placed early at the beginning of the countdown (0 - 350ms)
+      // ~82% arrive dynamically between 350ms and 4750ms
+      const joinedAtMs = Math.random() < 0.18
+        ? Math.floor(Math.random() * 350)
+        : Math.floor(Math.random() * 4400 + 350);
+
       bets.push({
         id: `bet-${Date.now()}-${i}-${id}`,
         seed: id,
@@ -332,6 +349,7 @@ export default function UltimateJetPesaCockpit() {
         mult: target,
         payout: 0,
         status: 'queued',
+        joinedAtMs,
       });
     }
 
@@ -340,10 +358,13 @@ export default function UltimateJetPesaCockpit() {
     return bets;
   }, []);
 
-  const startFreshLiveBetsFeed = useCallback(() => {
+  const startFreshLiveBetsFeed = useCallback((initialOffsetMs = 0) => {
     const bets = generateFreshLiveBets();
-    setLiveBetsFeed(bets);
-    setActivePlayersCount(250);
+    roundPoolBetsRef.current = bets;
+    const visible = bets.filter((b) => b.joinedAtMs <= initialOffsetMs);
+    liveBetsFeedRef.current = visible;
+    setLiveBetsFeed(visible);
+    setActivePlayersCount(visible.length);
   }, [generateFreshLiveBets]);
 
   const updateLiveBetStatuses = useCallback((currentMultiplier, effectiveCrash = 100) => {
@@ -373,14 +394,19 @@ export default function UltimateJetPesaCockpit() {
         return b;
       });
 
+      if (changed) {
+        liveBetsFeedRef.current = next;
+      }
       return changed ? next : prev;
     });
   }, []);
 
   const markLiveBetsCrashed = useCallback(() => {
-    setLiveBetsFeed((prev) =>
-      prev.map((b) => (b.status === 'cashed' ? b : { ...b, status: 'lost' }))
-    );
+    setLiveBetsFeed((prev) => {
+      const next = prev.map((b) => (b.status === 'cashed' ? b : { ...b, status: 'lost' }));
+      liveBetsFeedRef.current = next;
+      return next;
+    });
   }, []);
 
   const sha256Hex = async (input) => {
@@ -566,7 +592,9 @@ export default function UltimateJetPesaCockpit() {
 
     checkSessionAndSync();
     fetchRoundState();
-    startFreshLiveBetsFeed();
+    const initEpoch = Date.now();
+    const initOffset = initEpoch % 24000;
+    startFreshLiveBetsFeed(initOffset);
 
     return () => {
       isMounted = false;
@@ -609,7 +637,7 @@ export default function UltimateJetPesaCockpit() {
         cycleCrashedRef.current = false;
         crashTimestampRef.current = 0;
         queuedBetPendingRef.current = { A: false, B: false };
-        startFreshLiveBetsFeed();
+        startFreshLiveBetsFeed(offsetMs);
         fetchRoundState();
       }
 
@@ -622,6 +650,19 @@ export default function UltimateJetPesaCockpit() {
           setGameStatus('idle');
           setMultiplier(1.0);
           playSynthesizedTone(440, 'triangle', 0.05, 0.03);
+        }
+
+        // Visually increment LIVE players count and incoming bets dynamically during countdown
+        if (roundPoolBetsRef.current.length > 0) {
+          if (epochTimeMs - lastBetFeedUpdateRef.current > 45 || offsetMs > countdownInterval - 80) {
+            const visible = roundPoolBetsRef.current.filter((b) => b.joinedAtMs <= offsetMs);
+            if (visible.length !== liveBetsFeedRef.current.length) {
+              lastBetFeedUpdateRef.current = epochTimeMs;
+              liveBetsFeedRef.current = visible;
+              setLiveBetsFeed(visible);
+              setActivePlayersCount(visible.length);
+            }
+          }
         }
 
         const remainingMs = Math.max(0, countdownInterval - offsetMs);
@@ -652,6 +693,13 @@ export default function UltimateJetPesaCockpit() {
           placeQueuedBet('B', deckB);
         }
       } else if (offsetMs < countdownInterval + simulationWindow) {
+        // Ensure all round pool bets are locked in as flight takes off
+        if (roundPoolBetsRef.current.length > 0 && liveBetsFeedRef.current.length !== roundPoolBetsRef.current.length) {
+          liveBetsFeedRef.current = roundPoolBetsRef.current;
+          setLiveBetsFeed(roundPoolBetsRef.current);
+          setActivePlayersCount(roundPoolBetsRef.current.length);
+        }
+
         if (cycleCrashedRef.current) {
           // Stay cleanly crashed until the next cycle's single pre-flight countdown
           if (gameStatusRef.current !== 'crashed') {
@@ -1363,7 +1411,7 @@ export default function UltimateJetPesaCockpit() {
       <div className="jp-history-tape" suppressHydrationWarning>
         {!mounted || historyTape.length === 0 ? (
           <div style={{ color: '#64748b', fontSize: '12px', fontWeight: '800', padding: '5px 2px' }}>
-            Previous rounds will appear after the first completed flight.
+            {mounted ? 'Previous rounds will appear after the first completed flight.' : ''}
           </div>
         ) : (
           historyTape.map((h, i) => (
@@ -1378,7 +1426,7 @@ export default function UltimateJetPesaCockpit() {
       <div className="jp-layout">
         <div className="jp-panel jp-left-panel" data-active={mobileActivePanel === 'bets'}>
           <div className="jp-tab-bar">
-            <button onClick={() => setActiveTab('all')} className={`jp-tab ${activeTab === 'all' ? 'jp-active' : ''}`}>LIVE ({activePlayersCount})</button>
+            <button onClick={() => setActiveTab('all')} className={`jp-tab ${activeTab === 'all' ? 'jp-active' : ''}`}>LIVE ({displayActivePlayers})</button>
             <button onClick={() => setActiveTab('mine')} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>MY BETS</button>
           </div>
           {activeTab === 'all' && (
