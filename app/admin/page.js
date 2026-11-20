@@ -13,6 +13,7 @@ export default function JetPesaAdminPage() {
   const [overviewData, setOverviewData] = useState(null);
   const [roundsData, setRoundsData] = useState([]);
   const [pastRoundsData, setPastRoundsData] = useState([]);
+  const [inFlightStats, setInFlightStats] = useState(null);
   const [currentCycleState, setCurrentCycleState] = useState(null);
   const [usersData, setUsersData] = useState([]);
   const [userSearch, setUserSearch] = useState('');
@@ -89,6 +90,7 @@ export default function JetPesaAdminPage() {
         setRoundsData(data.rounds || []);
         setPastRoundsData(data.pastRounds || []);
         setCurrentCycleState(data.currentState || null);
+        if (data.inFlightStats) setInFlightStats(data.inFlightStats);
       }
     } catch (e) {
       console.warn('Radar error:', e);
@@ -481,6 +483,150 @@ export default function JetPesaAdminPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </section>
+
+            {/* Live In-Flight Statistics (Real Pilots & Wagers) */}
+            <section className="jp-admin-panel jp-inflight-section">
+              <div className="jp-panel-header">
+                <div className="jp-history-strip-title">
+                  <span className="jp-history-clock-icon">🛩️</span>
+                  <div>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      In-Flight Telemetry: Round #{inFlightStats?.roundId || currentCycleState?.currentCycleIndex || currentCycleState?.cycleIndex || '—'}
+                      {inFlightStats?.isBettingPhase ? (
+                        <span className="jp-status-pill pill-active">⏱ COUNTDOWN PHASE</span>
+                      ) : inFlightStats?.hasCrashed ? (
+                        <span className="jp-status-pill pill-crashed">✕ FLEW AWAY @ {inFlightStats?.crashPoint?.toFixed(2)}x</span>
+                      ) : (
+                        <span className="jp-status-pill pill-live">● IN FLIGHT @ {(inFlightStats?.multiplier || currentCycleState?.currentMultiplier || 1.0).toFixed(2)}x</span>
+                      )}
+                    </h3>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="jp-tag-natural" style={{ fontSize: '9.5px', color: '#38bdf8' }}>
+                    🛡️ Verified Real Pilots Only
+                  </span>
+                  <span className="jp-panel-note">Live updating every 2.5s</span>
+                </div>
+              </div>
+
+              {/* In-Flight KPIs Grid */}
+              <div className="jp-inflight-kpi-grid">
+                <div className="jp-inflight-kpi-card">
+                  <span className="jp-kpi-sublabel">REAL PILOTS</span>
+                  <div className="jp-kpi-val text-white">
+                    {inFlightStats?.totalPilots || 0}
+                  </div>
+                  <small>{inFlightStats?.activePilots || 0} in flight • {inFlightStats?.cashedOutPilots || 0} cashed out</small>
+                </div>
+
+                <div className="jp-inflight-kpi-card">
+                  <span className="jp-kpi-sublabel">TOTAL REAL WAGERED</span>
+                  <div className="jp-kpi-val text-amber">
+                    KES {(inFlightStats?.totalStaked || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <small>Active stakes: KES {(inFlightStats?.activeStaked || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</small>
+                </div>
+
+                <div className="jp-inflight-kpi-card">
+                  <span className="jp-kpi-sublabel">REAL PAYOUTS WON</span>
+                  <div className="jp-kpi-val text-green">
+                    KES {(inFlightStats?.totalWon || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <small>{inFlightStats?.cashedOutPilots || 0} pilots cashed out</small>
+                </div>
+
+                <div className="jp-inflight-kpi-card">
+                  <span className="jp-kpi-sublabel">NET HOUSE RESULT (ROUND)</span>
+                  <div className={`jp-kpi-val ${(inFlightStats?.netHouseMargin || 0) >= 0 ? 'text-cyan' : 'text-rose'}`}>
+                    {(inFlightStats?.netHouseMargin || 0) >= 0 ? '+' : ''}KES {(inFlightStats?.netHouseMargin || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <small>{(inFlightStats?.netHouseMargin || 0) >= 0 ? 'House in Profit' : 'House in Deficit'}</small>
+                </div>
+              </div>
+
+              {/* Real Pilots Active Ledger */}
+              {(!inFlightStats?.bets || inFlightStats.bets.length === 0) ? (
+                <div className="jp-inflight-empty">
+                  <span style={{ fontSize: '18px', display: 'block', marginBottom: '6px' }}>📡</span>
+                  <strong>No real pilot wagers in Round #{inFlightStats?.roundId || currentCycleState?.currentCycleIndex || currentCycleState?.cycleIndex}</strong>
+                  <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '10.5px' }}>
+                    Real pilots who wager via funded M-Pesa balances on Deck A or Deck B will automatically stream live here with live cash-out metrics.
+                  </p>
+                </div>
+              ) : (
+                <div className="jp-table-wrap" style={{ marginTop: '12px' }}>
+                  <table className="jp-admin-table">
+                    <thead>
+                      <tr>
+                        <th>Pilot</th>
+                        <th>Deck</th>
+                        <th>Stake</th>
+                        <th>Target Auto Cashout</th>
+                        <th>Flight Multiplier</th>
+                        <th>Status</th>
+                        <th>Payout / Return</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inFlightStats.bets.map((bet) => {
+                        const isFlying = bet.status === 'ACTIVE' && !inFlightStats.hasCrashed && !inFlightStats.isBettingPhase;
+                        const curValue = isFlying ? (bet.stake * (inFlightStats.multiplier || 1.0)) : bet.winAmount;
+                        return (
+                          <tr key={bet.id}>
+                            <td>
+                              <strong>{bet.userPhone || bet.userName}</strong>
+                            </td>
+                            <td>
+                              <span className="jp-deck-pill">Deck {bet.deck}</span>
+                            </td>
+                            <td>
+                              <strong>KES {bet.stake.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+                            </td>
+                            <td>
+                              {bet.autoCashout ? (
+                                <span style={{ color: '#38bdf8', fontWeight: 800 }}>{bet.autoCashout.toFixed(2)}x</span>
+                              ) : (
+                                <span style={{ color: '#64748b' }}>Manual</span>
+                              )}
+                            </td>
+                            <td>
+                              {bet.multiplier ? (
+                                <span className="jp-table-mult text-green">{bet.multiplier.toFixed(2)}x</span>
+                              ) : isFlying ? (
+                                <span className="jp-table-mult text-amber">{(inFlightStats.multiplier || 1.0).toFixed(2)}x</span>
+                              ) : (
+                                <span style={{ color: '#64748b' }}>—</span>
+                              )}
+                            </td>
+                            <td>
+                              {bet.status === 'WON' ? (
+                                <span className="jp-status-pill pill-won">✓ CASHED OUT</span>
+                              ) : bet.status === 'CRASHED' || bet.status === 'LOST' ? (
+                                <span className="jp-status-pill pill-crashed">✕ CRASHED</span>
+                              ) : isFlying ? (
+                                <span className="jp-status-pill pill-live">● FLYING</span>
+                              ) : (
+                                <span className="jp-status-pill pill-active">⏱ WAITING TAKEOFF</span>
+                              )}
+                            </td>
+                            <td>
+                              {bet.status === 'WON' ? (
+                                <span style={{ color: '#22c55e', fontWeight: 900 }}>+KES {bet.winAmount.toFixed(2)}</span>
+                              ) : isFlying ? (
+                                <span style={{ color: '#fbbf24', fontWeight: 800 }}>Est. KES {curValue.toFixed(2)}</span>
+                              ) : (
+                                <span style={{ color: '#f43f5e', fontWeight: 700 }}>-KES {bet.stake.toFixed(2)}</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </section>
@@ -1040,6 +1186,13 @@ export default function JetPesaAdminPage() {
         .jp-tag-override-sm { background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 1px 5px; border-radius: 4px; font-size: 8px; font-weight: 800; }
         .jp-tag-natural-sm { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 1px 5px; border-radius: 4px; font-size: 8px; font-weight: 700; }
         .jp-history-empty { text-align: center; padding: 14px; color: #64748b; font-size: 11px; }
+
+        /* In-flight real pilots telemetry */
+        .jp-inflight-section { margin-bottom: 18px; border: 1px solid rgba(56, 189, 248, 0.2); background: radial-gradient(circle at top left, rgba(14, 165, 233, 0.05) 0%, rgba(15, 23, 42, 0.75) 100%); }
+        .jp-inflight-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
+        .jp-inflight-kpi-card { background: rgba(4, 7, 15, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 14px; }
+        .jp-kpi-sublabel { font-size: 8.5px; font-weight: 800; color: #94a3b8; letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
+        .jp-inflight-empty { text-align: center; padding: 20px 16px; background: rgba(4, 7, 15, 0.4); border: 1px dashed rgba(255, 255, 255, 0.1); border-radius: 10px; margin-top: 12px; }
 
         /* Panels & Tables */
         .jp-admin-panel { background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 16px 18px; backdrop-filter: blur(10px); }
