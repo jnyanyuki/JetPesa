@@ -160,17 +160,20 @@ export default function UltimateJetPesaCockpit() {
   const countdownTextRef = useRef(null);
   const gameStatusRef = useRef('idle');
   const lastThrottleTimeRef = useRef(0);
-  const [historyTape, setHistoryTape] = useState(() => {
-    if (typeof window === 'undefined') return [];
+  const [historyTape, setHistoryTape] = useState([]);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
     try {
       const saved = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY) || '[]');
-      return Array.isArray(saved)
-        ? saved.map(Number).filter((n) => n && n < 900).slice(0, 14)
-        : [];
+      if (Array.isArray(saved) && saved.length > 0) {
+        setHistoryTape(saved.map(Number).filter((n) => n && n < 900).slice(0, 14));
+      }
     } catch {
-      return [];
+      // ignore
     }
-  });
+  }, []);
 
   const [activePlayersCount, setActivePlayersCount] = useState(3412);
   const [liveBetsFeed, setLiveBetsFeed] = useState([]);
@@ -1325,8 +1328,8 @@ export default function UltimateJetPesaCockpit() {
       </header>
 
       {/* History Tape */}
-      <div className="jp-history-tape">
-        {historyTape.length === 0 ? (
+      <div className="jp-history-tape" suppressHydrationWarning>
+        {!mounted || historyTape.length === 0 ? (
           <div style={{ color: '#64748b', fontSize: '12px', fontWeight: '800', padding: '5px 2px' }}>
             Previous rounds will appear after the first completed flight.
           </div>
