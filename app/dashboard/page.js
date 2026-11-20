@@ -1392,7 +1392,7 @@ export default function UltimateJetPesaCockpit() {
         </div>
       ) : (
         <>
-          {liveBetsFeed.slice(0, 100).map((b) => (
+          {liveBetsFeed.map((b) => (
             <div key={b.id} className={`jp-live-row ${b.status === 'cashed' ? 'jp-live-row-won' : ''}`}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                 <UserAvatar seed={b.seed} size={26} />
@@ -1422,11 +1422,6 @@ export default function UltimateJetPesaCockpit() {
               )}
             </div>
           ))}
-          {liveBetsFeed.length > 100 && (
-            <div style={{ textAlign: 'center', padding: '8px 4px', fontSize: '10px', color: '#64748b', fontWeight: '800' }}>
-              +{(liveBetsFeed.length - 100).toLocaleString()} more active pilots in this flight
-            </div>
-          )}
         </>
       )}
     </div>
@@ -2102,6 +2097,7 @@ export default function UltimateJetPesaCockpit() {
           padding: 7px 8px; background: rgba(15,23,42,0.85); border: 1px solid rgba(255,255,255,0.05);
           border-radius: 10px; font-size: 11px; margin-bottom: 5px;
           transition: background 0.2s ease, border-color 0.2s ease;
+          content-visibility: auto; contain-intrinsic-size: 38px;
         }
         .jp-live-row-won {
           background: rgba(34, 197, 94, 0.08) !important;
