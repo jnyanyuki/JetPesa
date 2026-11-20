@@ -151,6 +151,13 @@ function Icon({ name, size = 18, className = '', stroke = 2 }) {
           <circle cx="12" cy="12" r="2" />
         </svg>
       );
+    case 'clock':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -163,6 +170,7 @@ export default function JetPesaLandingPage() {
   const [demoMultiplier, setDemoMultiplier] = useState(1.0);
   const [demoStatus, setDemoStatus] = useState('loading');
   const [demoProgress, setDemoProgress] = useState(100);
+  const [demoSeconds, setDemoSeconds] = useState('3.5');
   const [demoBets, setDemoBets] = useState([]);
   const [totalPoolUsers, setTotalPoolUsers] = useState(3452);
   const [weeklyPot, setWeeklyPot] = useState(50000000);
@@ -362,6 +370,8 @@ export default function JetPesaLandingPage() {
           setDemoMultiplier(1.0);
           generateDemoBets();
         }
+        const remSec = ((3500 - elapsed) / 1000).toFixed(1);
+        setDemoSeconds(remSec);
         setDemoProgress(((3500 - elapsed) / 3500) * 100);
         drawDemoRadar(elapsed, 'loading', 1.0);
       } else if (elapsed < 25500) {
@@ -552,6 +562,15 @@ export default function JetPesaLandingPage() {
                 <div className="jp-loading-overlay">
                   <div className="jp-loader-plane">
                     <Icon name="plane-filled" size={44} />
+                  </div>
+                  <div className="jp-countdown-timer-wrap">
+                    <div className="jp-countdown-badge">
+                      <Icon name="clock" size={12} className="jp-countdown-clock-icon" />
+                      <span>NEXT FLIGHT IN</span>
+                    </div>
+                    <div className="jp-countdown-digital">
+                      <span className="jp-countdown-digits">{demoSeconds}s</span>
+                    </div>
                   </div>
                   <div className="jp-progress-track">
                     <div className="jp-progress-fill" style={{ width: `${demoProgress}%` }} />
@@ -1074,33 +1093,52 @@ export default function JetPesaLandingPage() {
 
         .jp-loading-overlay {
           position: absolute; inset: 0; z-index: 5;
-          background: rgba(2,6,23,.88);
+          background: radial-gradient(circle at center, rgba(15,23,42,.94) 0%, rgba(2,6,23,.98) 100%);
           display: flex; flex-direction: column;
           justify-content: center; align-items: center;
-          backdrop-filter: blur(4px);
+          backdrop-filter: blur(6px);
         }
         .jp-loader-plane {
           color: #ef4444;
-          margin-bottom: 16px;
+          margin-bottom: 10px;
           transform: rotate(-12deg);
           filter: drop-shadow(0 12px 18px rgba(239,68,68,.5));
           animation: jpFloat 2.5s ease-in-out infinite;
         }
+        .jp-countdown-timer-wrap {
+          display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 10px;
+        }
+        .jp-countdown-badge {
+          display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+          background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.3); color: #4ade80;
+          font-size: 10px; font-weight: 900; letter-spacing: .8px; text-transform: uppercase; margin-bottom: 4px;
+        }
+        .jp-countdown-clock-icon { color: #4ade80; }
+        .jp-countdown-digital {
+          display: flex; align-items: baseline; justify-content: center;
+        }
+        .jp-countdown-digits {
+          font-size: clamp(28px, 5vw, 42px); font-weight: 950; color: #ffffff;
+          letter-spacing: -1px; text-shadow: 0 0 20px rgba(34,197,94,.5);
+          line-height: 1;
+        }
         .jp-progress-track {
-          width: min(320px, 68%);
+          width: min(320px, 72%);
           height: 8px;
-          background: rgba(255,255,255,.08);
+          background: rgba(0,0,0,.6);
+          border: 1px solid rgba(34,197,94,.35);
           border-radius: 999px;
           overflow: hidden;
+          padding: 1px;
         }
         .jp-progress-fill {
           height: 100%;
-          background: linear-gradient(90deg, #22c55e, #86efac);
+          background: linear-gradient(90deg, #16a34a, #22c55e, #4ade80);
           border-radius: 999px;
-          transition: width .1s linear;
-          box-shadow: 0 0 12px rgba(34,197,94,.5);
+          box-shadow: 0 0 12px rgba(34,197,94,.7);
+          will-change: width;
         }
-        .jp-loading-text { color: #94a3b8; font-size: 12px; font-weight: 850; margin-top: 12px; }
+        .jp-loading-text { color: #94a3b8; font-size: 11px; font-weight: 850; margin-top: 10px; }
 
         .jp-multiplier-box {
           position: absolute; inset: 0;

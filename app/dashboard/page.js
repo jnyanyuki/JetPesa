@@ -65,6 +65,8 @@ function Icon({ name, size = 18, className = '', style = {} }) {
       return <svg {...props}><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>;
     case 'check':
       return <svg {...props}><path d="M20 6 9 17l-5-5" /></svg>;
+    case 'clock':
+      return <svg {...props}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
     default:
       return null;
   }
@@ -153,6 +155,11 @@ export default function UltimateJetPesaCockpit() {
   const [multiplier, setMultiplier] = useState(1.0);
   const [gameStatus, setGameStatus] = useState('idle');
   const [countdownProgress, setCountdownProgress] = useState(100);
+  const [countdownSeconds, setCountdownSeconds] = useState('5.0');
+  const progressFillRef = useRef(null);
+  const countdownTextRef = useRef(null);
+  const gameStatusRef = useRef('idle');
+  const lastThrottleTimeRef = useRef(0);
   const [historyTape, setHistoryTape] = useState(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -526,15 +533,16 @@ export default function UltimateJetPesaCockpit() {
   useEffect(() => {
     function runDistributedClockLoop() {
       const epochTimeMs = Date.now();
-      const cycleInterval = 28000;
+      const cycleInterval = 24000;
       const countdownInterval = 5000;
-      const simulationWindow = 20000;
+      const simulationWindow = 19000;
       const cycleIndex = Math.floor(epochTimeMs / cycleInterval);
       const offsetMs = epochTimeMs % cycleInterval;
 
       if (lastCycleRef.current !== cycleIndex) {
         lastCycleRef.current = cycleIndex;
         cycleCrashedRef.current = false;
+        crashTimestampRef.current = 0;
         queuedBetPendingRef.current = { A: false, B: false };
         startFreshLiveBetsFeed();
         fetchRoundState();
@@ -544,12 +552,31 @@ export default function UltimateJetPesaCockpit() {
 
       if (offsetMs < countdownInterval) {
         cycleCrashedRef.current = false;
-        if (gameStatus !== 'idle') {
+        if (gameStatusRef.current !== 'idle') {
+          gameStatusRef.current = 'idle';
           setGameStatus('idle');
           setMultiplier(1.0);
           playSynthesizedTone(440, 'triangle', 0.05, 0.03);
         }
-        setCountdownProgress(((countdownInterval - offsetMs) / countdownInterval) * 100);
+
+        const remainingMs = Math.max(0, countdownInterval - offsetMs);
+        const remSecStr = (remainingMs / 1000).toFixed(1);
+        const progressPct = Math.max(0, Math.min(100, (remainingMs / countdownInterval) * 100));
+
+        // Butter-smooth 60fps direct DOM updates
+        if (progressFillRef.current) {
+          progressFillRef.current.style.width = `${progressPct}%`;
+        }
+        if (countdownTextRef.current) {
+          countdownTextRef.current.textContent = `${remSecStr}s`;
+        }
+        // Throttled React state updates to prevent render thrashing
+        if (epochTimeMs - lastThrottleTimeRef.current > 75) {
+          lastThrottleTimeRef.current = epochTimeMs;
+          setCountdownSeconds(remSecStr);
+          setCountdownProgress(progressPct);
+        }
+
         if (offsetMs % 1000 < 20) playSynthesizedTone(320, 'sine', 0.03, 0.02);
         if (deckA.hasBetNext && !deckA.hasBetCurrent && !queuedBetPendingRef.current.A) {
           queuedBetPendingRef.current.A = true;
@@ -561,10 +588,39 @@ export default function UltimateJetPesaCockpit() {
         }
       } else if (offsetMs < countdownInterval + simulationWindow) {
         if (cycleCrashedRef.current) {
-          // Stay cleanly crashed
-          if (gameStatus !== 'crashed') {
-            setGameStatus('crashed');
-            setMultiplier(effectiveCrash);
+          const timeSinceCrash = crashTimestampRef.current ? epochTimeMs - crashTimestampRef.current : 3000;
+          if (timeSinceCrash > 2500) {
+            // After 2.5s of "FLEW AWAY", transition into waiting/betting for the next flight!
+            const msToNext = Math.max(0, cycleInterval - offsetMs);
+            const remSecStr = (msToNext / 1000).toFixed(1);
+            const crashOffset = crashTimestampRef.current ? (crashTimestampRef.current % cycleInterval) : countdownInterval;
+            const transitionWindow = Math.max(1000, cycleInterval - (crashOffset + 2500));
+            const progressPct = Math.max(0, Math.min(100, (msToNext / transitionWindow) * 100));
+
+            if (gameStatusRef.current !== 'idle') {
+              gameStatusRef.current = 'idle';
+              setGameStatus('idle');
+              setMultiplier(1.0);
+            }
+            if (progressFillRef.current) {
+              progressFillRef.current.style.width = `${progressPct}%`;
+            }
+            if (countdownTextRef.current) {
+              countdownTextRef.current.textContent = `${remSecStr}s`;
+            }
+            if (epochTimeMs - lastThrottleTimeRef.current > 75) {
+              lastThrottleTimeRef.current = epochTimeMs;
+              setCountdownSeconds(remSecStr);
+              setCountdownProgress(progressPct);
+            }
+            if (offsetMs % 1000 < 20) playSynthesizedTone(320, 'sine', 0.03, 0.02);
+          } else {
+            // Keep showing crashed banner with final multiplier for 2.5s
+            if (gameStatusRef.current !== 'crashed') {
+              gameStatusRef.current = 'crashed';
+              setGameStatus('crashed');
+              setMultiplier(effectiveCrash);
+            }
           }
         } else {
           // Periodically sync live round state from server to catch crash points dynamically
@@ -586,6 +642,7 @@ export default function UltimateJetPesaCockpit() {
           if (computedMultiplier >= effectiveCrash) {
             cycleCrashedRef.current = true;
             crashTimestampRef.current = epochTimeMs;
+            gameStatusRef.current = 'crashed';
             setGameStatus('crashed');
             setMultiplier(effectiveCrash);
             markLiveBetsCrashed();
@@ -593,7 +650,10 @@ export default function UltimateJetPesaCockpit() {
             setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
             setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
           } else {
-            if (gameStatus !== 'running') setGameStatus('running');
+            if (gameStatusRef.current !== 'running') {
+              gameStatusRef.current = 'running';
+              setGameStatus('running');
+            }
             setMultiplier(computedMultiplier);
             updateLiveBetStatuses(computedMultiplier);
             if (offsetMs % 300 < 20) playSynthesizedTone(200 + computedMultiplier * 15, 'sine', 0.015, 0.012);
@@ -615,13 +675,26 @@ export default function UltimateJetPesaCockpit() {
         }
       } else {
         cycleCrashedRef.current = true;
-        if (gameStatus !== 'crashed') {
-          setGameStatus('crashed');
-          setMultiplier(effectiveCrash);
-          markLiveBetsCrashed();
-          persistCrashToHistory(effectiveCrash, cycleIndex);
-          setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
-          setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+        const msToNext = Math.max(0, cycleInterval - offsetMs);
+        const remSecStr = (msToNext / 1000).toFixed(1);
+        const transitionWindow = Math.max(1000, cycleInterval - (countdownInterval + simulationWindow));
+        const progressPct = Math.max(0, Math.min(100, (msToNext / transitionWindow) * 100));
+
+        if (gameStatusRef.current !== 'idle') {
+          gameStatusRef.current = 'idle';
+          setGameStatus('idle');
+          setMultiplier(1.0);
+        }
+        if (progressFillRef.current) {
+          progressFillRef.current.style.width = `${progressPct}%`;
+        }
+        if (countdownTextRef.current) {
+          countdownTextRef.current.textContent = `${remSecStr}s`;
+        }
+        if (epochTimeMs - lastThrottleTimeRef.current > 75) {
+          lastThrottleTimeRef.current = epochTimeMs;
+          setCountdownSeconds(remSecStr);
+          setCountdownProgress(progressPct);
         }
       }
 
@@ -632,7 +705,7 @@ export default function UltimateJetPesaCockpit() {
     animationId.current = requestAnimationFrame(runDistributedClockLoop);
     return () => cancelAnimationFrame(animationId.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deckA, deckB, gameStatus, balance, audioMuted, isRainActive]);
+  }, [deckA, deckB, balance, audioMuted, isRainActive]);
 
   /* ---------------------------------------------------------------------- */
   /*  TRULY RESPONSIVE CANVAS — reads actual container dimensions            */
@@ -688,7 +761,7 @@ export default function UltimateJetPesaCockpit() {
       ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(W, j); ctx.stroke();
     }
 
-    if (offsetMs >= countdownLimit) {
+    if (offsetMs >= countdownLimit && gameStatusRef.current !== 'idle') {
       const secondsInAir = (offsetMs - countdownLimit) / 1000;
       drawRain(ctx, W, H, secondsInAir);
 
@@ -1293,9 +1366,24 @@ export default function UltimateJetPesaCockpit() {
           <div className="jp-canvas-container">
             {gameStatus === 'idle' && (
               <div className="jp-idle-overlay">
-                <div className="jp-progress-track"><div className="jp-progress-fill" style={{ width: `${countdownProgress}%` }} /></div>
+                <div className="jp-countdown-timer-wrap">
+                  <div className="jp-countdown-badge">
+                    <Icon name="clock" size={13} className="jp-countdown-clock-icon" />
+                    <span>NEXT ROUND IN</span>
+                  </div>
+                  <div className="jp-countdown-digital">
+                    <span ref={countdownTextRef} className="jp-countdown-digits">{countdownSeconds}s</span>
+                  </div>
+                </div>
+                <div className="jp-progress-track">
+                  <div
+                    ref={progressFillRef}
+                    className="jp-progress-fill"
+                    style={{ width: `${countdownProgress}%` }}
+                  />
+                </div>
                 <span className="jp-idle-text">WAITING FOR NEXT FLIGHT...</span>
-                <span className="jp-idle-sub">New wagers loading...</span>
+                <span className="jp-idle-sub">Place your bets · Takeoff in {countdownSeconds}s</span>
               </div>
             )}
             <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
@@ -1714,13 +1802,54 @@ export default function UltimateJetPesaCockpit() {
           overflow: hidden; min-height: 0; box-shadow: inset 0 0 40px rgba(0,0,0,0.9);
         }
         .jp-idle-overlay {
-          position: absolute; inset: 0; background: rgba(4,5,9,0.94);
+          position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(15,23,42,0.95) 0%, rgba(2,6,23,0.98) 100%);
           display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;
+          animation: jpFadeIn 0.2s ease-out;
         }
-        .jp-progress-track { width: 70%; max-width: 280px; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 10px; border: 1px solid rgba(34,197,94,0.2); }
-        .jp-progress-fill { height: 6px; background: linear-gradient(to right, #22c55e, #4ade80); border-radius: 6px; transition: width 0.1s linear; box-shadow: 0 0 10px rgba(34,197,94,0.5); }
-        .jp-idle-text { color: #fff; font-size: 12px; font-weight: 900; margin-top: 12px; letter-spacing: 0.5px; text-align: center; padding: 0 16px; }
-        .jp-idle-sub { color: #475569; font-size: 10px; font-weight: 700; margin-top: 3px; }
+        .jp-countdown-timer-wrap {
+          display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 12px;
+        }
+        .jp-countdown-badge {
+          display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px;
+          background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); color: #4ade80;
+          font-size: 11px; font-weight: 900; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px;
+        }
+        .jp-countdown-clock-icon { color: #4ade80; animation: jpPulse 1.2s infinite; }
+        .jp-countdown-digital {
+          display: flex; align-items: baseline; justify-content: center;
+        }
+        .jp-countdown-digits {
+          font-size: clamp(34px, 7vw, 56px); font-weight: 950; color: #ffffff;
+          font-family: 'Plus Jakarta Sans', system-ui, -apple-system, monospace;
+          letter-spacing: -1.5px; text-shadow: 0 0 24px rgba(34,197,94,0.55), 0 2px 8px rgba(0,0,0,0.8);
+          line-height: 1;
+        }
+        .jp-progress-track {
+          width: 75%; max-width: 320px; height: 9px; background: rgba(0,0,0,0.65);
+          padding: 2px; border-radius: 999px; border: 1px solid rgba(34,197,94,0.35);
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.7), 0 0 16px rgba(34,197,94,0.2);
+          overflow: hidden;
+        }
+        .jp-progress-fill {
+          height: 100%; background: linear-gradient(90deg, #16a34a 0%, #22c55e 50%, #4ade80 100%);
+          border-radius: 999px; box-shadow: 0 0 12px rgba(34,197,94,0.8);
+          will-change: width;
+        }
+        .jp-idle-text {
+          color: #f8fafc; font-size: 12px; font-weight: 900; margin-top: 14px;
+          letter-spacing: 1px; text-align: center; text-transform: uppercase;
+        }
+        .jp-idle-sub {
+          color: #94a3b8; font-size: 11px; font-weight: 700; margin-top: 4px;
+        }
+        @keyframes jpPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(0.92); }
+        }
+        @keyframes jpFadeIn {
+          from { opacity: 0; transform: scale(0.98); }
+          to { opacity: 1; transform: scale(1); }
+        }
         .jp-multiplier-overlay { position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
         .jp-multiplier-text { font-size: clamp(36px, 8vw, 96px); font-weight: 900; color: #fff; margin: 0; letter-spacing: -2px; text-shadow: 0 0 30px rgba(255,255,255,0.2); }
         .jp-crashed-title { color: #e11d48; font-size: clamp(24px, 5vw, 52px); font-weight: 900; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
