@@ -8,20 +8,31 @@ export const dynamic = 'force-dynamic';
 export async function POST(request) {
   try {
     const session = await getAuthSession(request);
-    const body = await request.json();
+    let body = {};
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ success: false, message: 'Malformed JSON payload.' }, { status: 400 });
+    }
     const { amount, phone, username } = body;
 
     const userId = session?.user?.id || username;
     if (!userId) {
-      throw new Error('User authentication required.');
+      return NextResponse.json({ success: false, message: 'User authentication required.' }, { status: 401 });
     }
 
     const amt = Math.floor(Number(amount));
     if (!amt || amt < 10) {
-      throw new Error('Minimum deposit is KES 10.');
+      return NextResponse.json({ success: false, message: 'Minimum deposit is KES 10.' }, { status: 200 });
     }
 
-    const cleanPhone = normalizeKenyanPhone(phone, 'local');
+    let cleanPhone = '';
+    try {
+      cleanPhone = normalizeKenyanPhone(phone, 'local');
+    } catch {
+      return NextResponse.json({ success: false, message: 'Invalid phone number format. Use 07XXXXXXXX or 01XXXXXXXX.' }, { status: 200 });
+    }
+
     const reference = `JP-DEP-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
 
     // Ensure user row exists in public.users
@@ -40,32 +51,40 @@ export async function POST(request) {
     `, [reference, userId, amt, cleanPhone]);
 
     // Call PrintPay C2B STK Push
-    const printpayRes = await initiatePrintPayC2B({
-      phone: cleanPhone,
-      amount: amt,
-    });
+    try {
+      const printpayRes = await initiatePrintPayC2B({
+        phone: cleanPhone,
+        amount: amt,
+      });
 
-    const checkoutId = printpayRes.checkout_id || null;
+      const checkoutId = printpayRes.checkout_id || null;
 
-    await sql.query(`
-      UPDATE public.deposits 
-      SET checkout_id = $1, raw_callback = $2, updated_at = NOW() 
-      WHERE id = $3
-    `, [checkoutId, JSON.stringify(printpayRes), reference]);
+      await sql.query(`
+        UPDATE public.deposits 
+        SET checkout_id = $1, raw_callback = $2, updated_at = NOW() 
+        WHERE id = $3
+      `, [checkoutId, JSON.stringify(printpayRes), reference]);
 
-    return NextResponse.json({
-      success: true,
-      reference,
-      checkoutId,
-      paybill: PRINTPAY_PAYBILL,
-      accountNumber: PRINTPAY_WALLET_ID,
-      message: printpayRes.message || 'M-Pesa payment prompt sent to your phone.',
-    });
+      return NextResponse.json({
+        success: true,
+        reference,
+        checkoutId,
+        paybill: PRINTPAY_PAYBILL,
+        accountNumber: PRINTPAY_WALLET_ID,
+        message: printpayRes.message || 'M-Pesa payment prompt sent to your phone.',
+      }, { status: 200 });
+    } catch (gatewayErr) {
+      console.warn('PrintPay C2B STK Call Failed:', gatewayErr.message);
+      return NextResponse.json({
+        success: false,
+        message: gatewayErr.message || 'Failed to dispatch STK push prompt.',
+      }, { status: 200 });
+    }
   } catch (error) {
     console.error('C2B Handler Error:', error);
     return NextResponse.json(
       { success: false, message: error.message || 'Deposit initiation failed.' },
-      { status: 400 }
+      { status: 500 }
     );
   }
 }

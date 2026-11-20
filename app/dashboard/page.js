@@ -1176,12 +1176,12 @@ export default function UltimateJetPesaCockpit() {
         body: JSON.stringify({ amount: amt, phone: targetPhone }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Withdrawal initiation failed.');
-      }
-
       if (typeof data.newBalance === 'number') {
         setBalance(data.newBalance);
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Withdrawal initiation failed.');
       }
 
       setWithdrawAmount('');
