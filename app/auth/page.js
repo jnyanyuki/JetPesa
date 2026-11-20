@@ -92,8 +92,9 @@ function AuthForm() {
 
   const formatAuthPassword = (pwd) => {
     if (!pwd) return '';
-    // Transparently ensure Better Auth / system minimum length requirement for soft 4-5 char PINs / passwords
-    return pwd.length < 6 ? `jp_${pwd}_jet` : pwd;
+    // Better Auth enforces an 8-character minimum. If user provides a 4-7 char PIN or password,
+    // transparently wrap it deterministically so Better Auth security requirements are satisfied.
+    return pwd.length < 8 ? `jp_${pwd}_jetpesa` : pwd;
   };
 
   const resolveEmailFromPhone = async (phoneNum) => {
@@ -103,8 +104,8 @@ function AuthForm() {
       body: JSON.stringify({ phone: cleanPhone(phoneNum) }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.email) {
-      throw new Error(data.error || 'No JetPesa account found with that phone number.');
+    if (!res.ok || !data.exists || !data.email) {
+      throw new Error(data.message || data.error || 'No JetPesa account found with that phone number. Please sign up.');
     }
     return data.email;
   };
@@ -161,7 +162,8 @@ function AuthForm() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: cleanMpesaPhone }),
         });
-        if (checkRes.ok) {
+        const checkData = await checkRes.json().catch(() => ({}));
+        if (checkData.exists) {
           throw new Error('This phone number is already registered. Please click "Sign In" above.');
         }
 

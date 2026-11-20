@@ -747,7 +747,7 @@ export default function JetPesaLandingPage() {
         <span>Play responsibly · 18+</span>
       </footer>
 
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         /* ---------- Base ---------- */
         .jp-page {
           min-height: 100vh;
@@ -1413,7 +1413,7 @@ export default function JetPesaLandingPage() {
           .jp-hero { padding-top: 34px !important; gap: 28px !important; }
           .jp-final-cta { padding: 22px; }
         }
-      `}</style>
+      ` }} />
     </main>
   );
 }

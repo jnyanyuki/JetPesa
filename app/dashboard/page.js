@@ -1357,7 +1357,7 @@ export default function UltimateJetPesaCockpit() {
         </div>
       )}
 
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         /* === BASE === */
         .jp-cockpit {
           background: #020617;
@@ -1823,7 +1823,7 @@ export default function UltimateJetPesaCockpit() {
           .jp-history-tape { padding: 4px 10px !important; }
           .jp-idle-text { font-size: 10px !important; margin-top: 6px !important; }
         }
-      `}</style>
+      ` }} />
     </div>
   );
 }

@@ -28,10 +28,10 @@ export async function POST(request) {
     );
 
     if (!rows.length) {
-      return NextResponse.json({ error: 'No account found with that phone number.' }, { status: 404 });
+      return NextResponse.json({ exists: false, message: 'No account found with that phone number.' }, { status: 200 });
     }
 
-    return NextResponse.json({ email: rows[0].email, userId: rows[0].id });
+    return NextResponse.json({ exists: true, email: rows[0].email, userId: rows[0].id }, { status: 200 });
   } catch (err) {
     console.error('Phone lookup error:', err);
     return NextResponse.json({ error: 'Failed to look up account.' }, { status: 500 });
