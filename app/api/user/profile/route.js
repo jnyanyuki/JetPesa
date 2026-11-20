@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sql } from '../../../../lib/db';
 import { getAuthSession } from '../../../../lib/auth/server';
+import { ensureUserHasIdCode, generate8DigitUserId } from '../../../../lib/userUtils';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,37 +13,28 @@ export async function GET(request) {
     }
     const userId = session.user.id;
 
-    const rows = await sql.query(`
-      SELECT id, email, phone, display_name, wallet_balance, created_at 
-      FROM public.users 
-      WHERE id = $1 
-      LIMIT 1
-    `, [userId]);
+    const u = await ensureUserHasIdCode(userId, {
+      email: session.user.email || null,
+      name: session.user.name || null,
+    });
 
-    if (!rows.length) {
-      // Auto-provision user record
-      await sql.query(`
-        INSERT INTO public.users (id, email, display_name, wallet_balance)
-        VALUES ($1, $2, $3, 0.00)
-        ON CONFLICT (id) DO NOTHING
-      `, [userId, session.user.email || null, session.user.name || null]);
-
-      return NextResponse.json({
-        id: userId,
-        email: session.user.email || '',
-        phone: '',
-        displayName: session.user.name || '',
-        walletBalance: 0.0,
-      });
+    if (!u) {
+      return NextResponse.json({ error: 'User record unavailable' }, { status: 500 });
     }
 
-    const u = rows[0];
-    return NextResponse.json({
+    const payload = {
       id: u.id,
+      userIdCode: u.user_id_code,
       email: u.email || session.user.email || '',
       phone: u.phone || '',
       displayName: u.display_name || session.user.name || '',
       walletBalance: Number(u.wallet_balance || 0),
+    };
+
+    return NextResponse.json({
+      success: true,
+      ...payload,
+      user: payload,
     });
   } catch (err) {
     console.error('Profile fetch error:', err);
@@ -63,19 +55,34 @@ export async function POST(request) {
     const cleanName = displayName ? String(displayName).trim().slice(0, 50) : null;
     const cleanPhone = phone ? String(phone).trim() : null;
 
-    await sql.query(`
-      INSERT INTO public.users (id, email, display_name, phone, wallet_balance)
-      VALUES ($1, $2, $3, $4, 0.00)
+    const newCode = generate8DigitUserId();
+
+    const res = await sql.query(`
+      INSERT INTO public.users (id, email, display_name, phone, wallet_balance, user_id_code)
+      VALUES ($1, $2, $3, $4, 0.00, $5)
       ON CONFLICT (id) DO UPDATE SET
         display_name = COALESCE($3, public.users.display_name),
         phone = COALESCE($4, public.users.phone),
+        user_id_code = COALESCE(public.users.user_id_code, $5),
         updated_at = NOW()
-    `, [userId, session.user.email || null, cleanName, cleanPhone]);
+      RETURNING id, email, phone, display_name, wallet_balance, user_id_code
+    `, [userId, session.user.email || null, cleanName, cleanPhone, newCode]);
+
+    const u = res[0];
+
+    const payload = {
+      id: u.id,
+      userIdCode: u.user_id_code,
+      displayName: u.display_name || cleanName,
+      phone: u.phone || cleanPhone,
+      email: u.email || session.user.email || '',
+      walletBalance: Number(u.wallet_balance || 0),
+    };
 
     return NextResponse.json({
       success: true,
-      displayName: cleanName,
-      phone: cleanPhone,
+      ...payload,
+      user: payload,
     });
   } catch (err) {
     console.error('Profile update error:', err);

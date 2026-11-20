@@ -67,6 +67,8 @@ function Icon({ name, size = 18, className = '', style = {} }) {
       return <svg {...props}><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>;
     case 'check':
       return <svg {...props}><path d="M20 6 9 17l-5-5" /></svg>;
+    case 'copy':
+      return <svg {...props}><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>;
     case 'clock':
       return <svg {...props}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
     default:
@@ -113,6 +115,8 @@ export default function UltimateJetPesaCockpit() {
   const [balance, setBalance] = useState(0.0);
   const [phoneProfile, setPhoneProfile] = useState('');
   const [profileName, setProfileName] = useState('');
+  const [userIdCode, setUserIdCode] = useState('');
+  const [copiedUserId, setCopiedUserId] = useState(false);
   const [editPhone, setEditPhone] = useState('');
   const [editName, setEditName] = useState('');
   const [rememberPhone, setRememberPhone] = useState(true);
@@ -647,17 +651,23 @@ export default function UltimateJetPesaCockpit() {
       const res = await fetch('/api/user/profile');
       if (res.ok) {
         const data = await res.json();
-        if (data.success && data.user) {
-          setBalance(Number(data.user.walletBalance || 0.0));
-          if (data.user.displayName) {
-            setProfileName(data.user.displayName);
-            setEditName((p) => p || data.user.displayName);
+        const profile = data.user || data;
+        if (profile) {
+          if (profile.walletBalance !== undefined) {
+            setBalance(Number(profile.walletBalance || 0.0));
           }
-          if (data.user.phone) {
-            setPhoneProfile(data.user.phone);
-            setInputPhone((p) => p || data.user.phone);
-            setEditPhone((p) => p || data.user.phone);
-            setWithdrawPhone((p) => p || data.user.phone);
+          if (profile.userIdCode) {
+            setUserIdCode(profile.userIdCode);
+          }
+          if (profile.displayName) {
+            setProfileName(profile.displayName);
+            setEditName((p) => p || profile.displayName);
+          }
+          if (profile.phone) {
+            setPhoneProfile(profile.phone);
+            setInputPhone((p) => p || profile.phone);
+            setEditPhone((p) => p || profile.phone);
+            setWithdrawPhone((p) => p || profile.phone);
           }
         }
       }
@@ -1078,6 +1088,27 @@ export default function UltimateJetPesaCockpit() {
   /* ---------------------------------------------------------------------- */
   /*  Wallet & Profile Logic                                                 */
   /* ---------------------------------------------------------------------- */
+  const handleCopyUserId = () => {
+    if (!userIdCode) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(userIdCode);
+      } else {
+        const el = document.createElement('textarea');
+        el.value = userIdCode;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+      }
+      setCopiedUserId(true);
+      triggerToast(`User ID ${userIdCode} copied to clipboard!`, 'success');
+      setTimeout(() => setCopiedUserId(false), 2000);
+    } catch (e) {
+      triggerToast(`User ID: ${userIdCode}`, 'info');
+    }
+  };
+
   const handleProfileUpdate = async () => {
     if (!user) return;
     const cleanPhone = editPhone.trim();
@@ -1098,6 +1129,9 @@ export default function UltimateJetPesaCockpit() {
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Failed to update profile');
+      }
+      if (data.userIdCode || data.user?.userIdCode) {
+        setUserIdCode(data.userIdCode || data.user?.userIdCode);
       }
       setProfileName(cleanDisplayName);
       setPhoneProfile(cleanPhone);
@@ -1529,9 +1563,9 @@ export default function UltimateJetPesaCockpit() {
             <Icon name="cloud-rain" size={13} />
             <span className="jp-rain-label">RAIN</span>
           </button>
-          <button className="jp-profile-btn" onClick={() => setIsProfileModalOpen(true)}>
+          <button className="jp-profile-btn" onClick={() => setIsProfileModalOpen(true)} title={userIdCode ? `User ID: ${userIdCode}` : 'Profile'}>
             <Icon name="user" size={13} />
-            <span className="jp-profile-label">PROFILE</span>
+            <span className="jp-profile-label">{userIdCode ? `ID: ${userIdCode}` : 'PROFILE'}</span>
           </button>
           <div className="jp-wallet-pill">
             <button className="jp-wallet-balance" onClick={() => balance > 0 ? setIsWithdrawModalOpen(true) : triggerToast('Wallet is empty. Deposit first.', 'info')}>
@@ -1720,6 +1754,65 @@ export default function UltimateJetPesaCockpit() {
           <div className="jp-modal-box jp-modal-blue" onClick={(e) => e.stopPropagation()}>
             <button className="jp-modal-close" onClick={() => setIsProfileModalOpen(false)}><Icon name="x" size={20} /></button>
             <h3 className="jp-modal-title" style={{ color: '#38bdf8' }}>Profile Settings</h3>
+
+            {/* 8-Digit User ID Field */}
+            <div className="jp-modal-field">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label className="jp-modal-label" style={{ margin: 0 }}>USER ID</label>
+                <span style={{ fontSize: '10px', color: '#38bdf8', fontWeight: 800, background: 'rgba(56, 189, 248, 0.12)', padding: '2px 8px', borderRadius: '4px', letterSpacing: '0.05em' }}>
+                  8-DIGIT ACCOUNT ID
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={userIdCode || '—'}
+                  disabled
+                  readOnly
+                  className="jp-modal-input jp-disabled"
+                  style={{
+                    flex: 1,
+                    letterSpacing: '0.22em',
+                    fontWeight: 900,
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    color: '#38bdf8',
+                    fontSize: '16px',
+                    background: 'rgba(56, 189, 248, 0.08)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    cursor: 'text',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyUserId}
+                  className="jp-modal-btn"
+                  title="Copy 8-digit User ID"
+                  style={{
+                    width: 'auto',
+                    minWidth: '82px',
+                    background: copiedUserId ? 'rgba(34, 197, 94, 0.2)' : 'rgba(56, 189, 248, 0.15)',
+                    border: `1px solid ${copiedUserId ? '#22c55e' : 'rgba(56, 189, 248, 0.35)'}`,
+                    color: copiedUserId ? '#22c55e' : '#38bdf8',
+                    borderRadius: '8px',
+                    padding: '0 12px',
+                    height: '42px',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '5px',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <Icon name={copiedUserId ? 'check' : 'copy'} size={14} />
+                  <span>{copiedUserId ? 'COPIED' : 'COPY'}</span>
+                </button>
+              </div>
+            </div>
+
             <div className="jp-modal-field"><label className="jp-modal-label">DISPLAY NAME</label><input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Your name" className="jp-modal-input" /></div>
             <div className="jp-modal-field"><label className="jp-modal-label">EMAIL</label><input type="text" value={user?.email || ''} disabled className="jp-modal-input jp-disabled" /></div>
             <div className="jp-modal-field"><label className="jp-modal-label">M-PESA PHONE</label><input type="text" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="07XXXXXXXX" className="jp-modal-input" /></div>

@@ -23,7 +23,7 @@ export async function POST(request) {
     }
 
     const rows = await sql.query(
-      `SELECT id, email, phone FROM public.users WHERE phone = $1 OR phone = $2 LIMIT 1`,
+      `SELECT id, email, phone, user_id_code FROM public.users WHERE phone = $1 OR phone = $2 LIMIT 1`,
       [localPhone, intlPhone]
     );
 
@@ -31,7 +31,12 @@ export async function POST(request) {
       return NextResponse.json({ exists: false, message: 'No account found with that phone number.' }, { status: 200 });
     }
 
-    return NextResponse.json({ exists: true, email: rows[0].email, userId: rows[0].id }, { status: 200 });
+    return NextResponse.json({
+      exists: true,
+      email: rows[0].email,
+      userId: rows[0].id,
+      userIdCode: rows[0].user_id_code
+    }, { status: 200 });
   } catch (err) {
     console.error('Phone lookup error:', err);
     return NextResponse.json({ error: 'Failed to look up account.' }, { status: 500 });

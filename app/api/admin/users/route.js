@@ -18,15 +18,15 @@ export async function GET(request) {
     let rows = [];
     if (search) {
       rows = await sql.query(`
-        SELECT id, email, phone, display_name, wallet_balance, created_at, updated_at
+        SELECT id, email, phone, display_name, wallet_balance, user_id_code, created_at, updated_at
         FROM public.users
-        WHERE phone ILIKE $1 OR email ILIKE $1 OR display_name ILIKE $1 OR id::text ILIKE $1
+        WHERE phone ILIKE $1 OR email ILIKE $1 OR display_name ILIKE $1 OR id::text ILIKE $1 OR user_id_code ILIKE $1
         ORDER BY created_at DESC
         LIMIT $2 OFFSET $3
       `, [`%${search}%`, limit, offset]);
     } else {
       rows = await sql.query(`
-        SELECT id, email, phone, display_name, wallet_balance, created_at, updated_at
+        SELECT id, email, phone, display_name, wallet_balance, user_id_code, created_at, updated_at
         FROM public.users
         ORDER BY created_at DESC
         LIMIT $1 OFFSET $2
@@ -37,6 +37,7 @@ export async function GET(request) {
       success: true,
       users: rows.map((u) => ({
         id: u.id,
+        userIdCode: u.user_id_code,
         email: u.email,
         phone: u.phone,
         displayName: u.display_name,

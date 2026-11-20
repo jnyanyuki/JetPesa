@@ -941,7 +941,7 @@ export default function JetPesaAdminPage() {
                 <div className="jp-search-box">
                   <input
                     type="text"
-                    placeholder="Search phone, name, email..."
+                    placeholder="Search phone, 8-digit ID, name, email..."
                     value={userSearch}
                     onChange={(e) => {
                       setUserSearch(e.target.value);
@@ -974,7 +974,16 @@ export default function JetPesaAdminPage() {
                       usersData.map((u) => (
                         <tr key={u.id}>
                           <td>
-                            <strong>{u.phone || u.id.slice(0, 8)}</strong>
+                            <strong>{u.phone || '—'}</strong>
+                            {u.userIdCode ? (
+                              <div style={{ fontSize: '11px', color: '#38bdf8', fontFamily: 'monospace', fontWeight: 700, marginTop: '2px' }}>
+                                ID: {u.userIdCode}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '10px', color: '#64748b', fontFamily: 'monospace' }}>
+                                {u.id.slice(0, 8)}
+                              </div>
+                            )}
                           </td>
                           <td>{u.displayName || '—'}</td>
                           <td>{u.email || '—'}</td>
