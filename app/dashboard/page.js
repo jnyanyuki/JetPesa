@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { authClient } from '../../lib/auth/client';
 import confetti from 'canvas-confetti';
+import { generateDynamicLobbyChat } from '../../lib/chatEngine';
 
 const MIN_WAGER = 10;
 const HISTORY_STORAGE_KEY = 'jetpesa_real_previous_rounds';
@@ -708,25 +709,44 @@ export default function UltimateJetPesaCockpit() {
     };
   }, []);
 
+  const gameContextRef = useRef({ multiplier: 1.0, gameStatus: 'idle', crashPoint: 2.0 });
+
+  useEffect(() => {
+    gameContextRef.current = {
+      multiplier,
+      gameStatus,
+      crashPoint: activeRoundTimingRef.current?.crashPoint || 2.0,
+    };
+  }, [multiplier, gameStatus]);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatLogs]);
 
   useEffect(() => {
-    const chatPool = [
-      { user: 'Fox072***14', seed: 'fox', msg: 'Weh, plane irefuka maze, cash out haraka!' },
-      { user: 'Rhino079***88', seed: 'rhino', msg: 'Mugithii uu no rugendo ruranya gugikura na iguru.' },
-      { user: 'Jet011***23', seed: 'jet', msg: 'Anya tero mwandu nyaka polo! Retain control omera.' },
-      { user: 'Pilot070***66', seed: 'pilot', msg: 'Free bets admin please.....' },
-      { user: 'Mamba072***99', seed: 'mamba', msg: '50k innit! hii ni ingine mwechecheeee' },
-      { user: 'Sky010***45', seed: 'sky', msg: 'Wakuu mmenikula ata school fees, watu wanichangie please' },
-      { user: 'Turbo075***04', seed: 'turbo', msg: 'Nimeweka 500 stake hapa, twende sasa kabla iland.' },
-    ];
-    const intervalChat = setInterval(() => {
-      const picked = chatPool[Math.floor(Math.random() * chatPool.length)];
-      setChatLogs((p) => [...p, { ...picked, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
-    }, 8000);
-    return () => clearInterval(intervalChat);
+    let timer = null;
+
+    const scheduleNextChat = () => {
+      // Natural human typing cadence between 4.5s and 8.5s
+      const delay = Math.floor(Math.random() * 4000 + 4500);
+      timer = setTimeout(() => {
+        const ctx = gameContextRef.current;
+        const newMsg = generateDynamicLobbyChat({
+          currentMultiplier: ctx.multiplier,
+          isBettingPhase: ctx.gameStatus === 'idle',
+          hasCrashed: ctx.gameStatus === 'crashed',
+          crashPoint: ctx.crashPoint,
+        });
+
+        setChatLogs((prev) => [...prev.slice(-35), newMsg]);
+        scheduleNextChat();
+      }, delay);
+    };
+
+    scheduleNextChat();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
