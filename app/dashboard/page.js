@@ -176,7 +176,31 @@ export default function UltimateJetPesaCockpit() {
   }, []);
 
   const [activePlayersCount, setActivePlayersCount] = useState(24);
+  const [lobbyOnlineCount, setLobbyOnlineCount] = useState(3412);
   const [liveBetsFeed, setLiveBetsFeed] = useState([]);
+
+  useEffect(() => {
+    const getBaseLobbyCount = () => {
+      const hr = new Date().getHours();
+      // Peak hours (18:00 - 23:30): 3,800 to 5,200
+      if (hr >= 18 && hr <= 23) return 3800 + Math.floor(Math.random() * 1400);
+      // Daytime (11:00 - 18:00): 2,600 to 3,600
+      if (hr >= 11 && hr < 18) return 2600 + Math.floor(Math.random() * 1000);
+      // Morning (07:00 - 11:00): 1,800 to 2,600
+      if (hr >= 7 && hr < 11) return 1800 + Math.floor(Math.random() * 800);
+      // Late night: 1,100 to 1,700
+      return 1100 + Math.floor(Math.random() * 600);
+    };
+
+    setLobbyOnlineCount(getBaseLobbyCount());
+    const interval = setInterval(() => {
+      setLobbyOnlineCount((prev) => {
+        const delta = Math.floor(Math.random() * 25) - 12;
+        return Math.max(1100, Math.min(6500, prev + delta));
+      });
+    }, 4500);
+    return () => clearInterval(interval);
+  }, []);
 
   const displayActivePlayers = useMemo(() => {
     let count = activePlayersCount;
@@ -307,8 +331,8 @@ export default function UltimateJetPesaCockpit() {
 
   const generateFreshLiveBets = useCallback(() => {
     const px = ['070***', '071***', '072***', '079***', '011***', '074***', '010***', '075***', '076***', '078***'];
-    // System capacity is 250; play active wagers in randomized batches of 100 to 200 per round
-    const count = Math.floor(Math.random() * 101 + 100);
+    // Flight capacity is 250; play active wagers in high-volume batches of 140 to 230 per round
+    const count = Math.floor(Math.random() * 91 + 140);
     const bets = [];
 
     for (let i = 0; i < count; i++) {
@@ -331,7 +355,19 @@ export default function UltimateJetPesaCockpit() {
         target = parseFloat((4.51 + Math.random() * 13.49).toFixed(2));
       }
 
-      const stake = Math.floor(Math.random() * 4500 + 150);
+      // Tiered realistic staking:
+      // ~50% retail wagers: KES 50 - KES 450
+      // ~35% core wagers: KES 500 - KES 2,500
+      // ~15% high-rollers: KES 3,000 - KES 15,000
+      const stakeRand = Math.random();
+      let stake;
+      if (stakeRand < 0.50) {
+        stake = Math.floor(Math.random() * 41 + 5) * 10;
+      } else if (stakeRand < 0.85) {
+        stake = Math.floor(Math.random() * 41 + 10) * 50;
+      } else {
+        stake = Math.floor(Math.random() * 25 + 6) * 500;
+      }
 
       // Stagger joinedAtMs across the 5000ms countdown:
       // ~18% are placed early at the beginning of the countdown (0 - 350ms)
@@ -1426,11 +1462,24 @@ export default function UltimateJetPesaCockpit() {
       <div className="jp-layout">
         <div className="jp-panel jp-left-panel" data-active={mobileActivePanel === 'bets'}>
           <div className="jp-tab-bar">
-            <button onClick={() => setActiveTab('all')} className={`jp-tab ${activeTab === 'all' ? 'jp-active' : ''}`}>LIVE ({displayActivePlayers})</button>
+            <button onClick={() => setActiveTab('all')} className={`jp-tab ${activeTab === 'all' ? 'jp-active' : ''}`}>
+              <span className="jp-live-dot-pulse" />
+              LIVE ({lobbyOnlineCount.toLocaleString()})
+            </button>
             <button onClick={() => setActiveTab('mine')} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>MY BETS</button>
           </div>
           {activeTab === 'all' && (
             <div className="jp-live-summary-bar">
+              <div className="jp-live-summary-card">
+                <div className="jp-live-summary-header">
+                  <span className="jp-live-summary-dot jp-dot-pilots" />
+                  <span className="jp-live-summary-label">IN FLIGHT</span>
+                </div>
+                <span className="jp-live-summary-value jp-val-pilots">
+                  {displayActivePlayers} <span className="jp-summary-cap">/ 250</span>
+                </span>
+              </div>
+              <div className="jp-live-summary-divider" />
               <div className="jp-live-summary-card">
                 <div className="jp-live-summary-header">
                   <span className="jp-live-summary-dot jp-dot-placed" />
@@ -1876,12 +1925,12 @@ export default function UltimateJetPesaCockpit() {
         /* === LIVE SUMMARY BAR === */
         .jp-live-summary-bar {
           display: grid;
-          grid-template-columns: 1fr 1px 1fr;
+          grid-template-columns: 0.95fr 1px 1.15fr 1px 1.15fr;
           align-items: center;
           background: rgba(4, 7, 15, 0.75);
           border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-          padding: 8px 12px;
-          gap: 10px;
+          padding: 7px 10px;
+          gap: 7px;
           flex-shrink: 0;
         }
         .jp-live-summary-card {
@@ -1893,13 +1942,17 @@ export default function UltimateJetPesaCockpit() {
         .jp-live-summary-header {
           display: flex;
           align-items: center;
-          gap: 5px;
+          gap: 4px;
         }
         .jp-live-summary-dot {
           width: 6px;
           height: 6px;
           border-radius: 50%;
           flex-shrink: 0;
+        }
+        .jp-dot-pilots {
+          background: #a855f7;
+          box-shadow: 0 0 6px #a855f7;
         }
         .jp-dot-placed {
           background: #38bdf8;
@@ -1911,19 +1964,22 @@ export default function UltimateJetPesaCockpit() {
           animation: jpWonPulse 1.5s infinite;
         }
         .jp-live-summary-label {
-          font-size: 9px;
+          font-size: 8px;
           font-weight: 900;
-          letter-spacing: 0.6px;
+          letter-spacing: 0.5px;
           color: #94a3b8;
           text-transform: uppercase;
         }
         .jp-live-summary-value {
-          font-size: 13px;
+          font-size: 11.5px;
           font-weight: 950;
           font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+        .jp-val-pilots {
+          color: #e2e8f0;
         }
         .jp-val-placed {
           color: #f1f5f9;
@@ -1932,10 +1988,30 @@ export default function UltimateJetPesaCockpit() {
           color: #22c55e;
           text-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
         }
+        .jp-summary-cap {
+          font-size: 9px;
+          color: #64748b;
+          font-weight: 800;
+        }
         .jp-live-summary-divider {
-          height: 24px;
+          height: 22px;
           background: rgba(255, 255, 255, 0.08);
           width: 1px;
+        }
+        .jp-live-dot-pulse {
+          display: inline-block;
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #22c55e;
+          box-shadow: 0 0 8px #22c55e;
+          margin-right: 6px;
+          vertical-align: middle;
+          animation: jpLivePulse 1.8s infinite;
+        }
+        @keyframes jpLivePulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.8); }
         }
         @keyframes jpWonPulse {
           0%, 100% { opacity: 1; transform: scale(1); }
