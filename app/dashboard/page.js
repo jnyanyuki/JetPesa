@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { authClient } from '../../lib/auth/client';
 import confetti from 'canvas-confetti';
@@ -177,6 +177,23 @@ export default function UltimateJetPesaCockpit() {
 
   const [activePlayersCount, setActivePlayersCount] = useState(3412);
   const [liveBetsFeed, setLiveBetsFeed] = useState([]);
+
+  const totalLivePlaced = useMemo(() => {
+    let sum = liveBetsFeed.reduce((acc, b) => acc + (Number(b.bet) || 0), 0);
+    if (deckA.hasBetCurrent) sum += Number(deckA.wager) || 0;
+    if (deckB.hasBetCurrent) sum += Number(deckB.wager) || 0;
+    return sum;
+  }, [liveBetsFeed, deckA.hasBetCurrent, deckA.wager, deckB.hasBetCurrent, deckB.wager]);
+
+  const totalLiveWon = useMemo(() => {
+    return liveBetsFeed.reduce((acc, b) => {
+      if (b.status === 'cashed') {
+        const payout = Number(b.payout) || Math.floor((Number(b.bet) || 0) * (Number(b.mult) || 1));
+        return acc + payout;
+      }
+      return acc;
+    }, 0);
+  }, [liveBetsFeed]);
   const [chatInput, setChatInput] = useState('');
   const [chatLogs, setChatLogs] = useState([
     { user: 'Shark071***45', seed: 'shark', msg: 'Admin, background rain drop claim active?', time: '08:02' },
@@ -1309,6 +1326,29 @@ export default function UltimateJetPesaCockpit() {
             <button onClick={() => setActiveTab('all')} className={`jp-tab ${activeTab === 'all' ? 'jp-active' : ''}`}>LIVE ({activePlayersCount})</button>
             <button onClick={() => setActiveTab('mine')} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>MY BETS</button>
           </div>
+          {activeTab === 'all' && (
+            <div className="jp-live-summary-bar">
+              <div className="jp-live-summary-card">
+                <div className="jp-live-summary-header">
+                  <span className="jp-live-summary-dot jp-dot-placed" />
+                  <span className="jp-live-summary-label">TOTAL PLACED</span>
+                </div>
+                <span className="jp-live-summary-value jp-val-placed">
+                  KES {totalLivePlaced.toLocaleString()}
+                </span>
+              </div>
+              <div className="jp-live-summary-divider" />
+              <div className="jp-live-summary-card">
+                <div className="jp-live-summary-header">
+                  <span className="jp-live-summary-dot jp-dot-won" />
+                  <span className="jp-live-summary-label">TOTAL WON</span>
+                </div>
+                <span className="jp-live-summary-value jp-val-won">
+                  KES {totalLiveWon.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          )}
           {activeTab === 'all' ? renderLiveBets() : (
             <div className="jp-panel-scroll">
               {myBetsHistory.length === 0 ? (
@@ -1729,6 +1769,75 @@ export default function UltimateJetPesaCockpit() {
           color: #94a3b8; font-size: 10px; font-weight: 800; border-radius: 8px; cursor: pointer;
         }
         .jp-tab.jp-active { background: rgba(255,255,255,0.06); color: #fff; }
+
+        /* === LIVE SUMMARY BAR === */
+        .jp-live-summary-bar {
+          display: grid;
+          grid-template-columns: 1fr 1px 1fr;
+          align-items: center;
+          background: rgba(4, 7, 15, 0.75);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+          padding: 8px 12px;
+          gap: 10px;
+          flex-shrink: 0;
+        }
+        .jp-live-summary-card {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+        .jp-live-summary-header {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+        .jp-live-summary-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .jp-dot-placed {
+          background: #38bdf8;
+          box-shadow: 0 0 6px #38bdf8;
+        }
+        .jp-dot-won {
+          background: #22c55e;
+          box-shadow: 0 0 8px #22c55e;
+          animation: jpWonPulse 1.5s infinite;
+        }
+        .jp-live-summary-label {
+          font-size: 9px;
+          font-weight: 900;
+          letter-spacing: 0.6px;
+          color: #94a3b8;
+          text-transform: uppercase;
+        }
+        .jp-live-summary-value {
+          font-size: 13px;
+          font-weight: 950;
+          font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .jp-val-placed {
+          color: #f1f5f9;
+        }
+        .jp-val-won {
+          color: #22c55e;
+          text-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+        }
+        .jp-live-summary-divider {
+          height: 24px;
+          background: rgba(255, 255, 255, 0.08);
+          width: 1px;
+        }
+        @keyframes jpWonPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.45; transform: scale(0.85); }
+        }
 
         /* === LIVE BETS === */
         .jp-live-table-head {
