@@ -314,7 +314,7 @@ export async function POST(request) {
       });
     }
 
-    const cleanMultiplier = Math.min(100.0, Math.max(1.0, parseFloat(Number(crashPoint).toFixed(2))));
+    const cleanMultiplier = Math.min(10000.0, Math.max(1.0, parseFloat(Number(crashPoint).toFixed(2))));
     setMemoryOverride(roundId, cleanMultiplier);
 
     await sql.query(`

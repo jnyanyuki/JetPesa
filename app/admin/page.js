@@ -1173,23 +1173,26 @@ export default function JetPesaAdminPage() {
                 Set a specific crash multiplier for this upcoming flight. The game engine and all connected clients will honor this exact target.
               </p>
 
-              <label>CUSTOM CRASH MULTIPLIER (1.00x - 100.00x):</label>
+              <label>CUSTOM CRASH MULTIPLIER (1.00x - 10,000.00x):</label>
               <input
                 type="number"
                 step="0.01"
                 min="1.00"
-                max="100.00"
-                placeholder="e.g. 15.50 or 1.00"
+                max="10000.00"
+                placeholder="e.g. 250.00, 1000.00, or 1.00"
                 value={overrideModal.newPoint}
                 onChange={(e) => setOverrideModal({ ...overrideModal, newPoint: e.target.value })}
               />
 
               <div className="jp-quick-mults">
                 <button onClick={() => setOverrideModal({ ...overrideModal, newPoint: '1.00' })}>Instant 1.00x</button>
-                <button onClick={() => setOverrideModal({ ...overrideModal, newPoint: '1.50' })}>1.50x</button>
                 <button onClick={() => setOverrideModal({ ...overrideModal, newPoint: '2.50' })}>2.50x</button>
                 <button onClick={() => setOverrideModal({ ...overrideModal, newPoint: '10.00' })}>10.00x</button>
                 <button onClick={() => setOverrideModal({ ...overrideModal, newPoint: '50.00' })}>50.00x</button>
+                <button onClick={() => setOverrideModal({ ...overrideModal, newPoint: '100.00' })}>100.00x</button>
+                <button onClick={() => setOverrideModal({ ...overrideModal, newPoint: '250.00' })}>250.00x</button>
+                <button onClick={() => setOverrideModal({ ...overrideModal, newPoint: '500.00' })}>500.00x</button>
+                <button onClick={() => setOverrideModal({ ...overrideModal, newPoint: '1000.00' })}>1,000.00x</button>
               </div>
 
               <div className="jp-modal-actions">
