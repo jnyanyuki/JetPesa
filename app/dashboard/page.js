@@ -591,39 +591,11 @@ export default function UltimateJetPesaCockpit() {
         }
       } else if (offsetMs < countdownInterval + simulationWindow) {
         if (cycleCrashedRef.current) {
-          const timeSinceCrash = crashTimestampRef.current ? epochTimeMs - crashTimestampRef.current : 3000;
-          if (timeSinceCrash > 2500) {
-            // After 2.5s of "FLEW AWAY", transition into waiting/betting for the next flight!
-            const msToNext = Math.max(0, cycleInterval - offsetMs);
-            const remSecStr = (msToNext / 1000).toFixed(1);
-            const crashOffset = crashTimestampRef.current ? (crashTimestampRef.current % cycleInterval) : countdownInterval;
-            const transitionWindow = Math.max(1000, cycleInterval - (crashOffset + 2500));
-            const progressPct = Math.max(0, Math.min(100, (msToNext / transitionWindow) * 100));
-
-            if (gameStatusRef.current !== 'idle') {
-              gameStatusRef.current = 'idle';
-              setGameStatus('idle');
-              setMultiplier(1.0);
-            }
-            if (progressFillRef.current) {
-              progressFillRef.current.style.width = `${progressPct}%`;
-            }
-            if (countdownTextRef.current) {
-              countdownTextRef.current.textContent = `${remSecStr}s`;
-            }
-            if (epochTimeMs - lastThrottleTimeRef.current > 75) {
-              lastThrottleTimeRef.current = epochTimeMs;
-              setCountdownSeconds(remSecStr);
-              setCountdownProgress(progressPct);
-            }
-            if (offsetMs % 1000 < 20) playSynthesizedTone(320, 'sine', 0.03, 0.02);
-          } else {
-            // Keep showing crashed banner with final multiplier for 2.5s
-            if (gameStatusRef.current !== 'crashed') {
-              gameStatusRef.current = 'crashed';
-              setGameStatus('crashed');
-              setMultiplier(effectiveCrash);
-            }
+          // Stay cleanly crashed until the next cycle's single pre-flight countdown
+          if (gameStatusRef.current !== 'crashed') {
+            gameStatusRef.current = 'crashed';
+            setGameStatus('crashed');
+            setMultiplier(effectiveCrash);
           }
         } else {
           // Periodically sync live round state from server to catch crash points dynamically
@@ -678,26 +650,14 @@ export default function UltimateJetPesaCockpit() {
         }
       } else {
         cycleCrashedRef.current = true;
-        const msToNext = Math.max(0, cycleInterval - offsetMs);
-        const remSecStr = (msToNext / 1000).toFixed(1);
-        const transitionWindow = Math.max(1000, cycleInterval - (countdownInterval + simulationWindow));
-        const progressPct = Math.max(0, Math.min(100, (msToNext / transitionWindow) * 100));
-
-        if (gameStatusRef.current !== 'idle') {
-          gameStatusRef.current = 'idle';
-          setGameStatus('idle');
-          setMultiplier(1.0);
-        }
-        if (progressFillRef.current) {
-          progressFillRef.current.style.width = `${progressPct}%`;
-        }
-        if (countdownTextRef.current) {
-          countdownTextRef.current.textContent = `${remSecStr}s`;
-        }
-        if (epochTimeMs - lastThrottleTimeRef.current > 75) {
-          lastThrottleTimeRef.current = epochTimeMs;
-          setCountdownSeconds(remSecStr);
-          setCountdownProgress(progressPct);
+        if (gameStatusRef.current !== 'crashed') {
+          gameStatusRef.current = 'crashed';
+          setGameStatus('crashed');
+          setMultiplier(effectiveCrash);
+          markLiveBetsCrashed();
+          persistCrashToHistory(effectiveCrash, cycleIndex);
+          setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
         }
       }
 
@@ -1386,7 +1346,7 @@ export default function UltimateJetPesaCockpit() {
                   />
                 </div>
                 <span className="jp-idle-text">WAITING FOR NEXT FLIGHT...</span>
-                <span className="jp-idle-sub">Place your bets · Takeoff in {countdownSeconds}s</span>
+                <span className="jp-idle-sub">Place your bets · Wagers closing soon</span>
               </div>
             )}
             <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
