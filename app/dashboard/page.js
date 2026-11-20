@@ -387,56 +387,41 @@ export default function UltimateJetPesaCockpit() {
       const id = Math.random().toString(36).substring(2, 8);
       const stake = generateMarketStake();
 
-      // Determine if this pilot will successfully cash out or crash with the plane
-      let willCashOut = false;
-      if (effectiveCrash > 1.02) {
-        let winRate;
-        if (effectiveCrash <= 1.25) winRate = 0.25;
-        else if (effectiveCrash <= 1.60) winRate = 0.38;
-        else if (effectiveCrash <= 2.50) winRate = 0.48;
-        else if (effectiveCrash <= 5.00) winRate = 0.58;
-        else if (effectiveCrash <= 20.0) winRate = 0.65;
-        else winRate = 0.70;
+      // Standard safe percentage bracket cashout distribution:
+      // High cashout rate from start (1.05x - 1.65x) that naturally reduces upwards in brackets.
+      // This ensures real players cannot visually deduce whether the flight will crash early or fly high!
+      const generateTargetMultiplier = () => {
+        // ~12% of pilots hold out for moonshots or play manual greed exceeding high crash points
+        if (effectiveCrash > 1.20 && Math.random() < 0.12) {
+          return parseFloat((effectiveCrash * (1.10 + Math.random() * 1.90)).toFixed(2));
+        }
 
-        willCashOut = Math.random() < winRate;
-      }
-
-      let target;
-      if (willCashOut) {
-        // Cashing out pilot: smoothly distributed along the graph [1.02x to 0.98 * effectiveCrash]
-        const maxCashout = parseFloat(Math.max(1.02, effectiveCrash - 0.01).toFixed(2));
-        const minCashout = 1.02;
-        const spread = maxCashout - minCashout;
-
-        if (spread <= 0.01) {
-          target = minCashout;
+        const r = Math.random();
+        if (r < 0.38) {
+          // Bracket 1: 1.05x - 1.25x (38% of players - rapid cashout rush right off the ground)
+          return parseFloat((1.05 + Math.random() * 0.20).toFixed(2));
+        } else if (r < 0.64) {
+          // Bracket 2: 1.26x - 1.65x (26% of players - strong conservative second wave)
+          return parseFloat((1.26 + Math.random() * 0.39).toFixed(2));
+        } else if (r < 0.80) {
+          // Bracket 3: 1.66x - 2.40x (16% of players - classic 2x doubling range)
+          return parseFloat((1.66 + Math.random() * 0.74).toFixed(2));
+        } else if (r < 0.89) {
+          // Bracket 4: 2.41x - 4.00x (9% of players - medium risk tier)
+          return parseFloat((2.41 + Math.random() * 1.59).toFixed(2));
+        } else if (r < 0.94) {
+          // Bracket 5: 4.01x - 8.00x (5% of players - high ambition tier)
+          return parseFloat((4.01 + Math.random() * 3.99).toFixed(2));
+        } else if (r < 0.975) {
+          // Bracket 6: 8.01x - 20.00x (3.5% of players - long-haul tier)
+          return parseFloat((8.01 + Math.random() * 11.99).toFixed(2));
         } else {
-          // Curved distribution gives steady, thrilling cashout pulses throughout the flight
-          const u = Math.random();
-          const curved = Math.pow(u, 1.35);
-          target = parseFloat((minCashout + curved * spread).toFixed(2));
-          if (target >= effectiveCrash) {
-            target = parseFloat((effectiveCrash - 0.01).toFixed(2));
-          }
+          // Bracket 7: 20.01x - 100.00x+ (2.5% of players - extreme moonshot tier)
+          return parseFloat((20.01 + Math.random() * 79.99).toFixed(2));
         }
-      } else {
-        // Pilots who do NOT cash out before crash point (greedier target or manual hold)
-        // These pilots remain active in flight and turn to 'lost' when the plane crashes!
-        const greedRand = Math.random();
-        if (greedRand < 0.50) {
-          // Just missed: target slightly above crash point
-          target = parseFloat((effectiveCrash * (1.02 + Math.random() * 0.78)).toFixed(2));
-        } else if (greedRand < 0.82) {
-          // Mid-greed: waiting for higher multiplier
-          target = parseFloat((effectiveCrash * (1.8 + Math.random() * 2.2)).toFixed(2));
-        } else {
-          // Moonshot hunters: waiting for 10x - 100x+
-          target = parseFloat((Math.max(12, effectiveCrash * 2.5) + Math.random() * 75).toFixed(2));
-        }
-        if (target <= effectiveCrash) {
-          target = parseFloat((effectiveCrash + 0.05).toFixed(2));
-        }
-      }
+      };
+
+      const target = generateTargetMultiplier();
 
       // Stagger joinedAtMs across the 5000ms countdown:
       // ~18% are placed early at the beginning of the countdown (0 - 350ms)
@@ -455,7 +440,7 @@ export default function UltimateJetPesaCockpit() {
         payout: 0,
         status: 'queued',
         joinedAtMs,
-        willCashOut,
+        willCashOut: target <= effectiveCrash,
       });
     }
 
