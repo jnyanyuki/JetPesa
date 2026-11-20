@@ -177,6 +177,7 @@ export default function UltimateJetPesaCockpit() {
 
   const [activePlayersCount, setActivePlayersCount] = useState(24);
   const [lobbyOnlineCount, setLobbyOnlineCount] = useState(3412);
+  const lobbyOnlineCountRef = useRef(3412);
   const [liveBetsFeed, setLiveBetsFeed] = useState([]);
 
   useEffect(() => {
@@ -192,11 +193,16 @@ export default function UltimateJetPesaCockpit() {
       return 1100 + Math.floor(Math.random() * 600);
     };
 
-    setLobbyOnlineCount(getBaseLobbyCount());
+    const initial = getBaseLobbyCount();
+    lobbyOnlineCountRef.current = initial;
+    setLobbyOnlineCount(initial);
+
     const interval = setInterval(() => {
       setLobbyOnlineCount((prev) => {
         const delta = Math.floor(Math.random() * 25) - 12;
-        return Math.max(1100, Math.min(6500, prev + delta));
+        const next = Math.max(1100, Math.min(6500, prev + delta));
+        lobbyOnlineCountRef.current = next;
+        return next;
       });
     }, 4500);
     return () => clearInterval(interval);
@@ -331,8 +337,10 @@ export default function UltimateJetPesaCockpit() {
 
   const generateFreshLiveBets = useCallback(() => {
     const px = ['070***', '071***', '072***', '079***', '011***', '074***', '010***', '075***', '076***', '078***'];
-    // Flight capacity is 250; play active wagers in high-volume batches of 140 to 230 per round
-    const count = Math.floor(Math.random() * 91 + 140);
+    // Dynamically derive active round wagers proportional to the active lobby traffic
+    const currentLobby = lobbyOnlineCountRef.current || 3200;
+    const participationRate = 0.045 + Math.random() * 0.025; // ~4.5% to 7.0% of online room
+    const count = Math.max(30, Math.floor(currentLobby * participationRate));
     const bets = [];
 
     for (let i = 0; i < count; i++) {
@@ -1476,7 +1484,7 @@ export default function UltimateJetPesaCockpit() {
                   <span className="jp-live-summary-label">IN FLIGHT</span>
                 </div>
                 <span className="jp-live-summary-value jp-val-pilots">
-                  {displayActivePlayers} <span className="jp-summary-cap">/ 250</span>
+                  {displayActivePlayers}
                 </span>
               </div>
               <div className="jp-live-summary-divider" />
@@ -1987,11 +1995,6 @@ export default function UltimateJetPesaCockpit() {
         .jp-val-won {
           color: #22c55e;
           text-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
-        }
-        .jp-summary-cap {
-          font-size: 9px;
-          color: #64748b;
-          font-weight: 800;
         }
         .jp-live-summary-divider {
           height: 22px;
