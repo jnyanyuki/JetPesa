@@ -9,29 +9,51 @@ export async function POST(request) {
   try {
     const session = await getAuthSession(request);
     if (!session?.user?.id) {
-      return NextResponse.json({ success: false, message: 'Authentication required. Please sign in.' }, { status: 401 });
+      return NextResponse.json(
+        { success: false, code: 'UNAUTHORIZED', message: 'Authentication required. Please sign in.' },
+        { status: 401 }
+      );
     }
     const userId = session.user.id;
 
-    const { deck, wager, autoCashout } = await request.json();
+    let body = {};
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, code: 'INVALID_JSON', message: 'Malformed JSON payload.' },
+        { status: 400 }
+      );
+    }
+
+    const { deck, wager, autoCashout, roundId } = body;
 
     const cleanDeck = String(deck || '').toUpperCase();
     if (cleanDeck !== 'A' && cleanDeck !== 'B') {
-      throw new Error('Invalid deck specified.');
+      return NextResponse.json(
+        { success: false, code: 'INVALID_DECK', message: 'Invalid deck specified. Must be A or B.' },
+        { status: 400 }
+      );
     }
 
     const amt = Math.floor(Number(wager));
     if (!amt || amt < 10) {
-      throw new Error('Minimum wager is KES 10.');
+      return NextResponse.json(
+        { success: false, code: 'MIN_WAGER', message: 'Minimum wager is KES 10.' },
+        { status: 400 }
+      );
     }
 
     const state = getCycleState();
-    const targetCycle = state.isBettingPhase ? state.cycleIndex : state.cycleIndex + 1;
+    // Use explicit roundId if valid and in future/current, else derive from current cycle state
+    const targetCycle = roundId && Number(roundId) >= state.cycleIndex
+      ? Number(roundId)
+      : (state.isBettingPhase ? state.cycleIndex : state.cycleIndex + 1);
     const betId = `BET-${targetCycle}-${cleanDeck}-${userId}`;
 
     let updatedBalance = 0;
 
-    await withTransaction(async (client) => {
+    const result = await withTransaction(async (client) => {
       // 1. Ensure user row exists in public.users
       await client.query(`
         INSERT INTO public.users (id, email, display_name, wallet_balance)
@@ -39,13 +61,25 @@ export async function POST(request) {
         ON CONFLICT (id) DO NOTHING
       `, [userId, session.user.email || null, session.user.name || null]);
 
-      // 2. Check existing active bet for this round & deck
+      // 2. Check if active bet already exists for this round & deck (Idempotent guard)
       const existing = await client.query(`
-        SELECT id FROM public.bets 
+        SELECT id, stake FROM public.bets 
         WHERE id = $1 AND status = 'ACTIVE' LIMIT 1
       `, [betId]);
+
       if (existing.rows.length > 0) {
-        throw new Error(`You already have an active wager on Deck ${cleanDeck} for this round.`);
+        const balRes = await client.query(`SELECT wallet_balance FROM public.users WHERE id = $1`, [userId]);
+        updatedBalance = Number(balRes.rows[0]?.wallet_balance || 0);
+        return {
+          success: true,
+          alreadyActive: true,
+          betId,
+          cycleIndex: targetCycle,
+          wager: Number(existing.rows[0].stake),
+          balance: updatedBalance,
+          newBalance: updatedBalance,
+          message: `Wager on Deck ${cleanDeck} is already confirmed for round #${targetCycle}.`,
+        };
       }
 
       // 3. Atomically check and deduct wallet balance
@@ -57,10 +91,14 @@ export async function POST(request) {
       `, [amt, userId]);
 
       if (deductRes.rows.length === 0) {
-        // Fetch current balance to show helpful message
         const currentRes = await client.query(`SELECT wallet_balance FROM public.users WHERE id = $1`, [userId]);
         const curBal = Number(currentRes.rows[0]?.wallet_balance || 0);
-        throw new Error(`Insufficient funds. Your wallet balance is KES ${curBal.toFixed(2)}.`);
+        return {
+          success: false,
+          code: 'INSUFFICIENT_FUNDS',
+          balance: curBal,
+          message: `Insufficient funds. Your wallet balance is KES ${curBal.toFixed(2)}.`,
+        };
       }
 
       updatedBalance = Number(deductRes.rows[0].wallet_balance);
@@ -81,22 +119,24 @@ export async function POST(request) {
         amt,
         autoCashout ? parseFloat(Number(autoCashout).toFixed(2)) : null,
       ]);
+
+      return {
+        success: true,
+        betId,
+        cycleIndex: targetCycle,
+        wager: amt,
+        balance: updatedBalance,
+        newBalance: updatedBalance,
+        message: `Wager of KES ${amt} placed for round #${targetCycle}.`,
+      };
     });
 
-    return NextResponse.json({
-      success: true,
-      betId,
-      cycleIndex: targetCycle,
-      wager: amt,
-      balance: updatedBalance,
-      message: `Wager of KES ${amt} placed for round #${targetCycle}.`,
-    });
+    return NextResponse.json(result, { status: 200 });
   } catch (error) {
     console.error('Game Bet Error:', error);
-    const status = error.message?.includes('Authentication') ? 401 : 400;
     return NextResponse.json(
-      { success: false, message: error.message },
-      { status }
+      { success: false, message: error.message || 'Failed to place wager' },
+      { status: 500 }
     );
   }
 }

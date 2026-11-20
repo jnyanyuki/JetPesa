@@ -261,6 +261,8 @@ export default function UltimateJetPesaCockpit() {
   const betNonceRef = useRef(1);
   const lastStateCheckRef = useRef(0);
   const queuedBetPendingRef = useRef({ A: false, B: false });
+  const payoutPendingRef = useRef({ A: false, B: false });
+  const placedRoundForDeckRef = useRef({ A: null, B: null });
   const roundPoolBetsRef = useRef([]);
   const liveBetsFeedRef = useRef([]);
   const lastBetFeedUpdateRef = useRef(0);
@@ -790,6 +792,8 @@ export default function UltimateJetPesaCockpit() {
         cycleCrashedRef.current = false;
         crashTimestampRef.current = 0;
         queuedBetPendingRef.current = { A: false, B: false };
+        payoutPendingRef.current = { A: false, B: false };
+        placedRoundForDeckRef.current = { A: null, B: null };
         const elapsedCountdown = timing.startEpoch ? Math.max(0, epochTimeMs - timing.startEpoch) : 0;
         startFreshLiveBetsFeed(elapsedCountdown, effectiveCrash);
       }
@@ -842,12 +846,14 @@ export default function UltimateJetPesaCockpit() {
         }
 
         if (remainingMs % 1000 < 20) playSynthesizedTone(320, 'sine', 0.03, 0.02);
-        if (deckA.hasBetNext && !deckA.hasBetCurrent && !queuedBetPendingRef.current.A) {
+        if (deckA.hasBetNext && !deckA.hasBetCurrent && !queuedBetPendingRef.current.A && placedRoundForDeckRef.current.A !== cycleIndex) {
           queuedBetPendingRef.current.A = true;
+          placedRoundForDeckRef.current.A = cycleIndex;
           placeQueuedBet('A', deckA);
         }
-        if (deckB.hasBetNext && !deckB.hasBetCurrent && !queuedBetPendingRef.current.B) {
+        if (deckB.hasBetNext && !deckB.hasBetCurrent && !queuedBetPendingRef.current.B && placedRoundForDeckRef.current.B !== cycleIndex) {
           queuedBetPendingRef.current.B = true;
+          placedRoundForDeckRef.current.B = cycleIndex;
           placeQueuedBet('B', deckB);
         }
       } else if (!isPastCrash && !cycleCrashedRef.current) {
@@ -883,20 +889,16 @@ export default function UltimateJetPesaCockpit() {
           updateLiveBetStatuses(computedMultiplier, effectiveCrash);
           if (epochTimeMs % 300 < 20) playSynthesizedTone(200 + computedMultiplier * 15, 'sine', 0.015, 0.012);
 
-          setDeckA((p) => {
-            if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
-              triggerPayoutSequence('A', computedMultiplier, p);
-              return { ...p, hasBetCurrent: false, currentBetId: null };
-            }
-            return p;
-          });
-          setDeckB((p) => {
-            if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
-              triggerPayoutSequence('B', computedMultiplier, p);
-              return { ...p, hasBetCurrent: false, currentBetId: null };
-            }
-            return p;
-          });
+          if (deckA.hasBetCurrent && deckA.isAutoCash && computedMultiplier >= parseFloat(deckA.cashVal) && !payoutPendingRef.current.A) {
+            payoutPendingRef.current.A = true;
+            triggerPayoutSequence('A', computedMultiplier, deckA);
+            setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          }
+          if (deckB.hasBetCurrent && deckB.isAutoCash && computedMultiplier >= parseFloat(deckB.cashVal) && !payoutPendingRef.current.B) {
+            payoutPendingRef.current.B = true;
+            triggerPayoutSequence('B', computedMultiplier, deckB);
+            setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          }
         }
       } else {
         // POST-CRASH PAUSE (before next round)
@@ -1231,10 +1233,14 @@ export default function UltimateJetPesaCockpit() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
+        if (data.code === 'CRASHED' || data.code === 'ALREADY_RESOLVED') {
+          return;
+        }
         throw new Error(data.message || 'Auto-cashout missed.');
       }
-      if (typeof data.newBalance === 'number') {
-        setBalance(data.newBalance);
+      const newBal = typeof data.newBalance === 'number' ? data.newBalance : data.balance;
+      if (typeof newBal === 'number') {
+        setBalance(newBal);
       }
       setMyBetsHistory((p) => [{ roundId: Date.now().toString().slice(-5), stake: activeState.wager, multiplier: data.multiplier, yieldAmount: data.winAmount, status: 'WON' }, ...p]);
       playSynthesizedTone(523.25, 'sine', 0.15, 0.05);
@@ -1243,7 +1249,7 @@ export default function UltimateJetPesaCockpit() {
       confetti({ particleCount: 90, spread: 65, origin: { y: 0.35 } });
       triggerToast(`Deck ${deckName} Auto Cashout @ ${data.multiplier.toFixed(2)}x! +KES ${data.winAmount.toFixed(2)}`, 'success');
     } catch (e) {
-      triggerToast(e.message, 'error');
+      // Clean catch for flight resolution races
     }
   };
 
@@ -1259,20 +1265,30 @@ export default function UltimateJetPesaCockpit() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ deck: deckName, wager: state.wager, autoCashout: autoCash }),
+        body: JSON.stringify({
+          deck: deckName,
+          wager: state.wager,
+          autoCashout: autoCash,
+          roundId: currentRoundRef.current.nonce,
+        }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        if (typeof data.newBalance === 'number') {
-          setBalance(data.newBalance);
+        const newBal = typeof data.newBalance === 'number' ? data.newBalance : data.balance;
+        if (typeof newBal === 'number') {
+          setBalance(newBal);
         }
         if (deckName === 'A') setDeckA((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId, hasBetNext: p.isAuto }));
         else setDeckB((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId, hasBetNext: p.isAuto }));
-        triggerToast(`Deck ${deckName} auto-stake KES ${state.wager} placed!`, 'success');
+        if (!data.alreadyActive) {
+          triggerToast(`Deck ${deckName} auto-stake KES ${state.wager} placed!`, 'success');
+        }
       } else {
         if (deckName === 'A') setDeckA((p) => ({ ...p, hasBetNext: false }));
         else setDeckB((p) => ({ ...p, hasBetNext: false }));
-        triggerToast(data.message || `Deck ${deckName} stake failed.`, 'error');
+        if (data.code !== 'ALREADY_ACTIVE') {
+          triggerToast(data.message || `Deck ${deckName} stake failed.`, 'error');
+        }
       }
     } catch {
       if (deckName === 'A') setDeckA((p) => ({ ...p, hasBetNext: false }));
@@ -1300,8 +1316,8 @@ export default function UltimateJetPesaCockpit() {
       return;
     }
 
-    // If flight is running, queue for next round
-    if (gameStatus === 'running') {
+    // If flight is running or crashed (post-crash pause), queue for next round
+    if (gameStatus === 'running' || gameStatus === 'crashed') {
       if (isA) setDeckA((p) => ({ ...p, hasBetNext: true }));
       else setDeckB((p) => ({ ...p, hasBetNext: true }));
       triggerToast(`Deck ${targetDeck} wager queued for next flight.`, 'info');
@@ -1315,14 +1331,20 @@ export default function UltimateJetPesaCockpit() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ deck: targetDeck, wager: currentWagerAmount, autoCashout: autoCash }),
+        body: JSON.stringify({
+          deck: targetDeck,
+          wager: currentWagerAmount,
+          autoCashout: autoCash,
+          roundId: currentRoundRef.current.nonce,
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Wager rejected.');
       }
-      if (typeof data.newBalance === 'number') {
-        setBalance(data.newBalance);
+      const newBal = typeof data.newBalance === 'number' ? data.newBalance : data.balance;
+      if (typeof newBal === 'number') {
+        setBalance(newBal);
       }
       if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId }));
       else setDeckB((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId }));
@@ -1347,10 +1369,22 @@ export default function UltimateJetPesaCockpit() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
+        if (data.code === 'CRASHED') {
+          triggerToast(data.message || 'Flight flew away. Cashout missed.', 'error');
+          if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          else setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          return;
+        }
+        if (data.code === 'ALREADY_RESOLVED') {
+          if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          else setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          return;
+        }
         throw new Error(data.message || 'Cashout failed.');
       }
-      if (typeof data.newBalance === 'number') {
-        setBalance(data.newBalance);
+      const newBal = typeof data.newBalance === 'number' ? data.newBalance : data.balance;
+      if (typeof newBal === 'number') {
+        setBalance(newBal);
       }
       if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
       else setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
