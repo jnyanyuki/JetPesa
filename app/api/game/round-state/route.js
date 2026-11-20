@@ -14,8 +14,7 @@ export async function GET() {
       hasCrashed: state.hasCrashed,
       multiplier: state.currentMultiplier,
       serverSeedHash: state.serverSeedHash,
-      // Reveal crashPoint ONLY if already crashed
-      crashPoint: state.hasCrashed ? state.crashPoint : null,
+      crashPoint: state.crashPoint,
       offsetMs: state.offsetMs,
     });
   } catch (error) {

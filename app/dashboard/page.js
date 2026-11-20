@@ -157,7 +157,9 @@ export default function UltimateJetPesaCockpit() {
     if (typeof window === 'undefined') return [];
     try {
       const saved = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY) || '[]');
-      return Array.isArray(saved) ? saved.map(Number).filter(Boolean).slice(0, 14) : [];
+      return Array.isArray(saved)
+        ? saved.map(Number).filter((n) => n && n < 900).slice(0, 14)
+        : [];
     } catch {
       return [];
     }
@@ -331,7 +333,13 @@ export default function UltimateJetPesaCockpit() {
     if (h % 33 === 0) return 1.0;
     const raw = (100 * e - h) / (e - h);
     const edged = raw * (1 - houseEdge);
-    return Math.max(1, Math.floor(edged) / 100);
+    return Math.min(100.0, Math.max(1, Math.floor(edged) / 100));
+  };
+
+  const calculateMultiplierAtSeconds = (activeSeconds) => {
+    if (activeSeconds <= 0) return 1.0;
+    const mult = Math.exp(0.06 * activeSeconds + 0.019 * Math.pow(activeSeconds, 2));
+    return parseFloat(mult.toFixed(2));
   };
 
   const generateLocalProvablyRound = useCallback(async (nonce) => {
@@ -363,6 +371,23 @@ export default function UltimateJetPesaCockpit() {
     });
   }, []);
 
+  const fetchRoundState = useCallback(async () => {
+    try {
+      const res = await fetch('/api/game/round-state', { cache: 'no-store' });
+      const data = await res.json();
+      if (data?.success) {
+        currentRoundRef.current = {
+          ...currentRoundRef.current,
+          nonce: data.cycleIndex,
+          crashPoint: Number(data.crashPoint || 2.0),
+          serverSeedHash: data.serverSeedHash || currentRoundRef.current.serverSeedHash,
+        };
+      }
+    } catch (err) {
+      console.warn('Failed to sync round state:', err);
+    }
+  }, []);
+
   const fetchProvablyRound = useCallback(async (nonce, openModal = false) => {
     try {
       if (openModal) setProvablyLoading(true);
@@ -371,7 +396,7 @@ export default function UltimateJetPesaCockpit() {
       if (!res.ok || !data.success) throw new Error(data.message || 'Could not load provably fair round.');
       currentRoundRef.current = {
         nonce: data.nonce,
-        crashPoint: Number(data.crashPoint || 999), // Remains flying until server signals crash
+        crashPoint: data.crashPoint ? Number(data.crashPoint) : (currentRoundRef.current.crashPoint || 2.0),
         serverSeedHash: data.serverSeedHash,
         roundHash: data.roundHash || 'Cryptographically sealed during flight',
         clientSeed: data.clientSeed,
@@ -464,7 +489,7 @@ export default function UltimateJetPesaCockpit() {
     };
 
     checkSessionAndSync();
-    fetchProvablyRound(1);
+    fetchRoundState();
     startFreshLiveBetsFeed();
 
     return () => {
@@ -507,10 +532,10 @@ export default function UltimateJetPesaCockpit() {
         lastCycleRef.current = cycleIndex;
         queuedBetPendingRef.current = { A: false, B: false };
         startFreshLiveBetsFeed();
-        fetchProvablyRound(cycleIndex + 1);
+        fetchRoundState();
       }
 
-      const crashPoint = currentRoundRef.current.crashPoint || 2;
+      const effectiveCrash = currentRoundRef.current.crashPoint || 2.0;
 
       if (offsetMs < countdownInterval) {
         if (gameStatus !== 'idle') {
@@ -537,19 +562,19 @@ export default function UltimateJetPesaCockpit() {
           fetch('/api/game/round-state', { cache: 'no-store' })
             .then((r) => r.json())
             .then((st) => {
-              if (st?.success && st?.hasCrashed && st?.crashPoint) {
-                currentRoundRef.current.crashPoint = st.crashPoint;
+              if (st?.success && st?.crashPoint) {
+                currentRoundRef.current.crashPoint = Number(st.crashPoint);
               }
             })
             .catch(() => {});
         }
         const activeSeconds = (offsetMs - countdownInterval) / 1000;
-        const computedMultiplier = parseFloat(Math.pow(Math.E, 0.078 * activeSeconds).toFixed(2));
-        if (computedMultiplier >= crashPoint) {
+        const computedMultiplier = calculateMultiplierAtSeconds(activeSeconds);
+        if (computedMultiplier >= effectiveCrash) {
           setGameStatus('crashed');
-          setMultiplier(crashPoint);
+          setMultiplier(effectiveCrash);
           markLiveBetsCrashed();
-          persistCrashToHistory(crashPoint, cycleIndex);
+          persistCrashToHistory(effectiveCrash, cycleIndex);
           setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
           setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
         } else {
@@ -573,9 +598,9 @@ export default function UltimateJetPesaCockpit() {
         }
       } else {
         setGameStatus('crashed');
-        setMultiplier(crashPoint);
+        setMultiplier(effectiveCrash);
         markLiveBetsCrashed();
-        persistCrashToHistory(crashPoint, cycleIndex);
+        persistCrashToHistory(effectiveCrash, cycleIndex);
         setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
         setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
       }
