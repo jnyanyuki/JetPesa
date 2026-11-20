@@ -299,8 +299,6 @@ export default function JetPesaAdminPage() {
   /* ------------------------------------------------------------------------ */
   /*  AUTHENTICATED ADMIN COCKPIT                                             */
   /* ------------------------------------------------------------------------ */
-  const nextRound = roundsData.find((r) => !r.isCurrent) || null;
-  const currentRound = roundsData.find((r) => r.isCurrent) || null;
 
   return (
     <div className="jp-admin-app">
@@ -389,61 +387,6 @@ export default function JetPesaAdminPage() {
         {/* ================================================================= */}
         {activeTab === 'radar' && (
           <div className="jp-admin-radar-view">
-            {/* Spotlight Banner: Immediate Next Round */}
-            {nextRound && (
-              <section className="jp-admin-spotlight-card">
-                <div className="jp-spotlight-left">
-                  <span className="jp-spotlight-tag">UPCOMING FLIGHT PREVIEW (NEXT ROUND)</span>
-                  <div className="jp-spotlight-title">
-                    <h2>Round #{nextRound.cycleIndex}</h2>
-                    <span className="jp-spotlight-timer">
-                      Departure in ~{nextRound.secondsUntilDeparture}s
-                    </span>
-                  </div>
-                  <p className="jp-spotlight-desc">
-                    Authoritative future calculation derived from SHA-256 HMAC Server Seed commitment.
-                  </p>
-                </div>
-
-                <div className="jp-spotlight-center">
-                  <div className="jp-spotlight-mult-box">
-                    <span className="jp-spotlight-label">CRASH MULTIPLIER</span>
-                    <span className={`jp-spotlight-mult-val mult-${nextRound.category.toLowerCase()}`}>
-                      {nextRound.crashPoint.toFixed(2)}x
-                    </span>
-                    <span className={`jp-cat-badge badge-${nextRound.category.toLowerCase()}`}>
-                      {nextRound.category} MULTIPLIER
-                    </span>
-                  </div>
-                </div>
-
-                <div className="jp-spotlight-right">
-                  {nextRound.isOverridden ? (
-                    <div className="jp-override-active-badge">
-                      <span>⚠️ OVERRIDE ACTIVE</span>
-                      <small>Natural Seed was: {nextRound.naturalCrashPoint?.toFixed(2)}x</small>
-                    </div>
-                  ) : (
-                    <div className="jp-override-natural-badge">
-                      <span>✓ 100% PROVABLY FAIR</span>
-                      <small>Natural Seed Commitment</small>
-                    </div>
-                  )}
-                  <button
-                    className="jp-override-trigger-btn"
-                    onClick={() => setOverrideModal({
-                      open: true,
-                      cycleIndex: nextRound.cycleIndex,
-                      currentPoint: nextRound.crashPoint,
-                      newPoint: nextRound.crashPoint.toString(),
-                    })}
-                  >
-                    ✏️ Override Crash Point
-                  </button>
-                </div>
-              </section>
-            )}
-
             {/* Last 5 Crash Points (History) */}
             <section className="jp-admin-history-strip">
               <div className="jp-history-strip-header">
