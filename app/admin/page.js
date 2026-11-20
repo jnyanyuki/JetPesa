@@ -972,47 +972,47 @@ export default function JetPesaAdminPage() {
       {/* Global CSS for Admin Panel */}
       <style dangerouslySetInnerHTML={{
         __html: `
-        body { margin: 0; background: #030712; color: #f8fafc; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
-        .jp-admin-app { min-height: 100vh; background: #030712; display: flex; flex-direction: column; }
+        body { margin: 0; background: #030712; color: #f8fafc; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; font-size: 11.5px; }
+        .jp-admin-app { min-height: 100vh; background: #030712; display: flex; flex-direction: column; font-size: 11.5px; }
         
         /* Header */
-        .jp-admin-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(12px); flex-wrap: wrap; gap: 14px; }
-        .jp-admin-brand { display: flex; align-items: center; gap: 10px; }
-        .jp-admin-brand h1 { margin: 0; font-size: 16px; font-weight: 900; letter-spacing: 0.05em; color: #fff; }
-        .jp-admin-pill { background: linear-gradient(135deg, #e11d48, #be123c); color: #fff; font-size: 10px; font-weight: 900; padding: 3px 8px; border-radius: 999px; }
+        .jp-admin-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(12px); flex-wrap: wrap; gap: 10px; }
+        .jp-admin-brand { display: flex; align-items: center; gap: 8px; }
+        .jp-admin-brand h1 { margin: 0; font-size: 13px; font-weight: 900; letter-spacing: 0.05em; color: #fff; }
+        .jp-admin-pill { background: linear-gradient(135deg, #e11d48, #be123c); color: #fff; font-size: 8.5px; font-weight: 900; padding: 2px 6px; border-radius: 999px; }
         
         .jp-admin-telemetry { display: flex; align-items: center; }
-        .jp-admin-live-badge { display: flex; align-items: center; gap: 8px; background: #090d16; border: 1px solid rgba(255,255,255,0.1); padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 800; }
-        .jp-pulse-dot { width: 8px; height: 8px; border-radius: 999px; background: #22c55e; box-shadow: 0 0 10px #22c55e; animation: jpBlink 1.2s infinite; }
+        .jp-admin-live-badge { display: flex; align-items: center; gap: 6px; background: #090d16; border: 1px solid rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 800; }
+        .jp-pulse-dot { width: 7px; height: 7px; border-radius: 999px; background: #22c55e; box-shadow: 0 0 8px #22c55e; animation: jpBlink 1.2s infinite; }
         .jp-tele-divider { color: #475569; }
 
-        .jp-admin-head-actions { display: flex; align-items: center; gap: 10px; }
-        .jp-admin-dash-link { color: #38bdf8; text-decoration: none; font-size: 12px; font-weight: 800; padding: 6px 12px; border-radius: 8px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); }
-        .jp-admin-logout-btn { background: #1f2937; color: #cbd5e1; border: 1px solid rgba(255,255,255,0.1); padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 800; cursor: pointer; }
+        .jp-admin-head-actions { display: flex; align-items: center; gap: 8px; }
+        .jp-admin-dash-link { color: #38bdf8; text-decoration: none; font-size: 10.5px; font-weight: 800; padding: 5px 10px; border-radius: 6px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); }
+        .jp-admin-logout-btn { background: #1f2937; color: #cbd5e1; border: 1px solid rgba(255,255,255,0.1); padding: 5px 11px; border-radius: 6px; font-size: 10.5px; font-weight: 800; cursor: pointer; }
 
         /* Tabs */
-        .jp-admin-tabs { display: flex; gap: 6px; padding: 12px 24px; background: #080d1a; border-bottom: 1px solid rgba(255,255,255,0.05); overflow-x: auto; }
-        .jp-admin-tab-btn { background: transparent; border: none; color: #94a3b8; font-size: 13px; font-weight: 800; padding: 10px 18px; border-radius: 10px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+        .jp-admin-tabs { display: flex; gap: 5px; padding: 8px 20px; background: #080d1a; border-bottom: 1px solid rgba(255,255,255,0.05); overflow-x: auto; }
+        .jp-admin-tab-btn { background: transparent; border: none; color: #94a3b8; font-size: 11.5px; font-weight: 800; padding: 7px 14px; border-radius: 8px; cursor: pointer; transition: all .15s; white-space: nowrap; }
         .jp-admin-tab-btn:hover { color: #fff; background: rgba(255,255,255,0.04); }
         .jp-admin-tab-btn.active { color: #fff; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 
         /* Body */
-        .jp-admin-body { padding: 24px; max-width: 1380px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+        .jp-admin-body { padding: 18px 20px; max-width: 1400px; width: 100%; margin: 0 auto; box-sizing: border-box; }
 
         /* Spotlight Card */
-        .jp-admin-spotlight-card { display: flex; align-items: center; justify-content: space-between; background: radial-gradient(circle at top left, #1e1b4b 0%, #0f172a 60%, #070a14 100%); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 20px; padding: 26px 32px; margin-bottom: 24px; box-shadow: 0 20px 45px rgba(0,0,0,0.6); flex-wrap: wrap; gap: 20px; }
-        .jp-spotlight-left { max-width: 440px; }
-        .jp-spotlight-tag { font-size: 10px; font-weight: 900; color: #818cf8; letter-spacing: 0.1em; display: block; margin-bottom: 6px; }
-        .jp-spotlight-title { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
-        .jp-spotlight-title h2 { margin: 0; font-size: 28px; font-weight: 900; color: #fff; }
-        .jp-spotlight-timer { font-size: 14px; font-weight: 800; color: #38bdf8; background: rgba(56, 189, 248, 0.12); padding: 4px 10px; border-radius: 999px; }
-        .jp-spotlight-desc { margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5; }
+        .jp-admin-spotlight-card { display: flex; align-items: center; justify-content: space-between; background: radial-gradient(circle at top left, #1e1b4b 0%, #0f172a 60%, #070a14 100%); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 14px; padding: 18px 24px; margin-bottom: 18px; box-shadow: 0 16px 36px rgba(0,0,0,0.55); flex-wrap: wrap; gap: 16px; }
+        .jp-spotlight-left { max-width: 420px; }
+        .jp-spotlight-tag { font-size: 9px; font-weight: 900; color: #818cf8; letter-spacing: 0.1em; display: block; margin-bottom: 4px; }
+        .jp-spotlight-title { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+        .jp-spotlight-title h2 { margin: 0; font-size: 20px; font-weight: 900; color: #fff; }
+        .jp-spotlight-timer { font-size: 11px; font-weight: 800; color: #38bdf8; background: rgba(56, 189, 248, 0.12); padding: 3px 8px; border-radius: 999px; }
+        .jp-spotlight-desc { margin: 0; font-size: 10.5px; color: #94a3b8; line-height: 1.4; }
 
-        .jp-spotlight-mult-box { text-align: center; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 18px 28px; min-width: 200px; }
-        .jp-spotlight-label { font-size: 10px; font-weight: 900; color: #64748b; letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
-        .jp-spotlight-mult-val { font-size: 44px; font-weight: 950; display: block; line-height: 1; margin-bottom: 8px; font-family: system-ui, sans-serif; }
+        .jp-spotlight-mult-box { text-align: center; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 22px; min-width: 160px; }
+        .jp-spotlight-label { font-size: 9px; font-weight: 900; color: #64748b; letter-spacing: 0.08em; display: block; margin-bottom: 3px; }
+        .jp-spotlight-mult-val { font-size: 32px; font-weight: 950; display: block; line-height: 1; margin-bottom: 6px; font-family: system-ui, sans-serif; }
         
-        .jp-cat-badge { display: inline-block; font-size: 10px; font-weight: 900; padding: 3px 8px; border-radius: 999px; }
+        .jp-cat-badge { display: inline-block; font-size: 8.5px; font-weight: 900; padding: 2px 7px; border-radius: 999px; }
         .badge-instant { background: #374151; color: #9ca3af; }
         .badge-low { background: rgba(59, 130, 246, 0.18); color: #60a5fa; }
         .badge-high { background: rgba(168, 85, 247, 0.18); color: #c084fc; }
@@ -1021,103 +1021,103 @@ export default function JetPesaAdminPage() {
         .mult-instant { color: #9ca3af; }
         .mult-low { color: #60a5fa; }
         .mult-high { color: #c084fc; }
-        .mult-mega { color: #fbbf24; text-shadow: 0 0 20px rgba(245,158,11,0.5); }
+        .mult-mega { color: #fbbf24; text-shadow: 0 0 16px rgba(245,158,11,0.5); }
 
-        .jp-spotlight-right { display: flex; flex-direction: column; gap: 12px; align-items: flex-end; }
-        .jp-override-active-badge { text-align: right; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.3); padding: 8px 14px; border-radius: 10px; color: #fda4af; font-size: 12px; font-weight: 800; }
-        .jp-override-active-badge small { display: block; font-size: 10px; color: #f43f5e; margin-top: 2px; }
-        .jp-override-natural-badge { text-align: right; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.25); padding: 8px 14px; border-radius: 10px; color: #86efac; font-size: 12px; font-weight: 800; }
-        .jp-override-natural-badge small { display: block; font-size: 10px; color: #4ade80; margin-top: 2px; }
-        .jp-override-trigger-btn { background: linear-gradient(135deg, #e11d48, #be123c); color: #fff; border: none; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; transition: transform .15s; }
+        .jp-spotlight-right { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+        .jp-override-active-badge { text-align: right; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.3); padding: 6px 11px; border-radius: 8px; color: #fda4af; font-size: 10.5px; font-weight: 800; }
+        .jp-override-active-badge small { display: block; font-size: 9px; color: #f43f5e; margin-top: 2px; }
+        .jp-override-natural-badge { text-align: right; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.25); padding: 6px 11px; border-radius: 8px; color: #86efac; font-size: 10.5px; font-weight: 800; }
+        .jp-override-natural-badge small { display: block; font-size: 9px; color: #4ade80; margin-top: 2px; }
+        .jp-override-trigger-btn { background: linear-gradient(135deg, #e11d48, #be123c); color: #fff; border: none; padding: 7px 14px; border-radius: 8px; font-size: 11.5px; font-weight: 800; cursor: pointer; transition: transform .15s; }
         .jp-override-trigger-btn:hover { transform: translateY(-1px); }
 
         /* History Strip (Last 5 Crash Points) */
-        .jp-admin-history-strip { background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 20px 24px; margin-bottom: 24px; backdrop-filter: blur(10px); }
-        .jp-history-strip-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
-        .jp-history-strip-title { display: flex; align-items: center; gap: 8px; }
-        .jp-history-strip-title h3 { margin: 0; font-size: 15px; font-weight: 800; color: #fff; letter-spacing: 0.02em; }
-        .jp-history-clock-icon { font-size: 16px; }
-        .jp-history-cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
-        .jp-history-card { background: rgba(4, 7, 15, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; transition: transform 0.15s, border-color 0.15s; }
-        .jp-history-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.2); }
-        .jp-history-card.border-instant { border-left: 4px solid #6b7280; }
-        .jp-history-card.border-low { border-left: 4px solid #60a5fa; }
-        .jp-history-card.border-high { border-left: 4px solid #c084fc; }
-        .jp-history-card.border-mega { border-left: 4px solid #fbbf24; }
+        .jp-admin-history-strip { background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 14px 18px; margin-bottom: 18px; backdrop-filter: blur(10px); }
+        .jp-history-strip-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+        .jp-history-strip-title { display: flex; align-items: center; gap: 6px; }
+        .jp-history-strip-title h3 { margin: 0; font-size: 12.5px; font-weight: 800; color: #fff; letter-spacing: 0.02em; }
+        .jp-history-clock-icon { font-size: 13px; }
+        .jp-history-cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+        .jp-history-card { background: rgba(4, 7, 15, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; transition: transform 0.15s, border-color 0.15s; }
+        .jp-history-card:hover { transform: translateY(-1px); border-color: rgba(255, 255, 255, 0.2); }
+        .jp-history-card.border-instant { border-left: 3px solid #6b7280; }
+        .jp-history-card.border-low { border-left: 3px solid #60a5fa; }
+        .jp-history-card.border-high { border-left: 3px solid #c084fc; }
+        .jp-history-card.border-mega { border-left: 3px solid #fbbf24; }
         .jp-history-card-top { display: flex; align-items: center; justify-content: space-between; }
-        .jp-history-round-label { font-size: 11px; font-weight: 800; color: #94a3b8; }
-        .jp-history-card-body { margin: 4px 0; }
-        .jp-history-mult-num { font-size: 26px; font-weight: 950; font-family: system-ui, sans-serif; line-height: 1; }
-        .jp-history-card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: #64748b; font-weight: 700; margin-top: 2px; }
-        .jp-history-ago { color: #64748b; font-size: 10px; }
-        .jp-tag-override-sm { background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; }
-        .jp-tag-natural-sm { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; }
-        .jp-history-empty { text-align: center; padding: 20px; color: #64748b; font-size: 12px; }
+        .jp-history-round-label { font-size: 9.5px; font-weight: 800; color: #94a3b8; }
+        .jp-history-card-body { margin: 2px 0; }
+        .jp-history-mult-num { font-size: 20px; font-weight: 950; font-family: system-ui, sans-serif; line-height: 1; }
+        .jp-history-card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 9px; color: #64748b; font-weight: 700; margin-top: 2px; }
+        .jp-history-ago { color: #64748b; font-size: 8.5px; }
+        .jp-tag-override-sm { background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 1px 5px; border-radius: 4px; font-size: 8px; font-weight: 800; }
+        .jp-tag-natural-sm { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 1px 5px; border-radius: 4px; font-size: 8px; font-weight: 700; }
+        .jp-history-empty { text-align: center; padding: 14px; color: #64748b; font-size: 11px; }
 
         /* Panels & Tables */
-        .jp-admin-panel { background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: 18px; padding: 22px; backdrop-filter: blur(10px); }
-        .jp-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
-        .jp-panel-header h3 { margin: 0; font-size: 16px; font-weight: 800; color: #fff; }
-        .jp-panel-note { font-size: 11px; color: #64748b; }
+        .jp-admin-panel { background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 16px 18px; backdrop-filter: blur(10px); }
+        .jp-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+        .jp-panel-header h3 { margin: 0; font-size: 13px; font-weight: 800; color: #fff; }
+        .jp-panel-note { font-size: 10px; color: #64748b; }
 
         .jp-table-wrap { overflow-x: auto; }
-        .jp-admin-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
-        .jp-admin-table th { padding: 12px 14px; background: rgba(0,0,0,0.3); color: #94a3b8; font-weight: 800; font-size: 11px; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); }
-        .jp-admin-table td { padding: 14px; border-bottom: 1px solid rgba(255,255,255,0.04); color: #cbd5e1; }
+        .jp-admin-table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
+        .jp-admin-table th { padding: 9px 11px; background: rgba(0,0,0,0.3); color: #94a3b8; font-weight: 800; font-size: 9.5px; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .jp-admin-table td { padding: 9px 11px; border-bottom: 1px solid rgba(255,255,255,0.04); color: #cbd5e1; }
         .jp-admin-table tr:hover { background: rgba(255,255,255,0.02); }
         .jp-admin-table tr.row-current { background: rgba(34, 197, 94, 0.06); border-left: 3px solid #22c55e; }
 
-        .jp-table-mult { font-weight: 900; font-size: 14px; }
-        .jp-tag-override { background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; }
-        .jp-tag-natural { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 3px 8px; border-radius: 6px; font-size: 11px; }
+        .jp-table-mult { font-weight: 900; font-size: 12px; }
+        .jp-tag-override { background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 2px 6px; border-radius: 5px; font-size: 9.5px; font-weight: 800; }
+        .jp-tag-natural { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 2px 6px; border-radius: 5px; font-size: 9.5px; }
 
-        .jp-status-pill { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 900; }
+        .jp-status-pill { display: inline-block; padding: 2px 6px; border-radius: 999px; font-size: 9px; font-weight: 900; }
         .pill-live { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
         .pill-queued { background: rgba(255,255,255,0.08); color: #94a3b8; }
         .pill-completed, .pill-won { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
         .pill-crashed, .pill-failed { background: rgba(244, 63, 94, 0.2); color: #fb7185; }
         .pill-active, .pill-pending { background: rgba(251, 191, 36, 0.2); color: #fde047; }
-        .jp-deck-pill { background: #1e293b; color: #cbd5e1; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; }
+        .jp-deck-pill { background: #1e293b; color: #cbd5e1; padding: 2px 6px; border-radius: 5px; font-size: 9.5px; font-weight: 800; }
 
-        .jp-sm-btn { background: #1f2937; border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 800; cursor: pointer; transition: background .15s; }
+        .jp-sm-btn { background: #1f2937; border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 4px 9px; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer; transition: background .15s; }
         .jp-sm-btn:hover { background: #374151; }
 
         /* KPI Grid */
-        .jp-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
-        .jp-kpi-card { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-        .jp-kpi-card label { display: block; font-size: 10px; font-weight: 800; color: #94a3b8; letter-spacing: 0.08em; margin-bottom: 8px; }
-        .jp-kpi-val { font-size: 24px; font-weight: 950; margin-bottom: 6px; }
-        .jp-kpi-card small { display: block; font-size: 11px; color: #64748b; }
+        .jp-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+        .jp-kpi-card { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 14px 16px; box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+        .jp-kpi-card label { display: block; font-size: 9px; font-weight: 800; color: #94a3b8; letter-spacing: 0.08em; margin-bottom: 5px; }
+        .jp-kpi-val { font-size: 18px; font-weight: 950; margin-bottom: 4px; }
+        .jp-kpi-card small { display: block; font-size: 9.5px; color: #64748b; }
         .text-cyan { color: #38bdf8; }
         .text-amber { color: #fbbf24; }
         .text-green { color: #22c55e; }
         .text-rose { color: #f43f5e; }
         .text-white { color: #fff; }
 
-        .jp-crypto-params { display: flex; flex-direction: column; gap: 10px; }
-        .jp-param-line { font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
-        .jp-param-line code { background: #090d16; padding: 8px 12px; border-radius: 8px; font-family: monospace; font-size: 12px; color: #cbd5e1; word-break: break-all; }
+        .jp-crypto-params { display: flex; flex-direction: column; gap: 8px; }
+        .jp-param-line { font-size: 11px; display: flex; flex-direction: column; gap: 3px; }
+        .jp-param-line code { background: #090d16; padding: 6px 10px; border-radius: 6px; font-family: monospace; font-size: 10.5px; color: #cbd5e1; word-break: break-all; }
 
-        .jp-search-box input { background: #090d16; border: 1px solid rgba(255,255,255,0.12); padding: 8px 14px; border-radius: 10px; color: #fff; font-size: 13px; outline: none; width: 240px; }
+        .jp-search-box input { background: #090d16; border: 1px solid rgba(255,255,255,0.12); padding: 6px 11px; border-radius: 8px; color: #fff; font-size: 11px; outline: none; width: 220px; }
 
         /* Modals */
-        .jp-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 99999; backdrop-filter: blur(8px); }
-        .jp-modal-box { width: 100%; max-width: 480px; background: #0f172a; border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; box-shadow: 0 25px 60px rgba(0,0,0,0.8); overflow: hidden; }
-        .jp-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #131d35; }
-        .jp-modal-head h3 { margin: 0; font-size: 15px; font-weight: 800; color: #fff; }
-        .jp-modal-head button { background: transparent; border: none; color: #94a3b8; font-size: 18px; cursor: pointer; }
-        .jp-modal-content { padding: 22px; }
-        .jp-modal-content p { margin: 0 0 16px; font-size: 13px; color: #94a3b8; line-height: 1.5; }
-        .jp-modal-content label { display: block; font-size: 11px; font-weight: 800; color: #cbd5e1; margin-bottom: 6px; letter-spacing: 0.05em; }
-        .jp-modal-content input { width: 100%; padding: 12px 14px; background: #090d16; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #fff; font-size: 14px; box-sizing: border-box; outline: none; }
-        .jp-quick-mults { display: flex; gap: 6px; margin: 12px 0 20px; flex-wrap: wrap; }
-        .jp-quick-mults button { background: #1e293b; border: 1px solid rgba(255,255,255,0.08); color: #cbd5e1; padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 800; cursor: pointer; }
-        .jp-modal-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; }
-        .jp-btn-revert { background: #1f2937; border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; padding: 10px 14px; border-radius: 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
-        .jp-btn-save { background: linear-gradient(135deg, #e11d48, #be123c); border: none; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
+        .jp-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 99999; backdrop-filter: blur(8px); }
+        .jp-modal-box { width: 100%; max-width: 440px; background: #0f172a; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); overflow: hidden; }
+        .jp-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #131d35; }
+        .jp-modal-head h3 { margin: 0; font-size: 13px; font-weight: 800; color: #fff; }
+        .jp-modal-head button { background: transparent; border: none; color: #94a3b8; font-size: 16px; cursor: pointer; }
+        .jp-modal-content { padding: 18px; }
+        .jp-modal-content p { margin: 0 0 12px; font-size: 11px; color: #94a3b8; line-height: 1.4; }
+        .jp-modal-content label { display: block; font-size: 10px; font-weight: 800; color: #cbd5e1; margin-bottom: 5px; letter-spacing: 0.05em; }
+        .jp-modal-content input { width: 100%; padding: 9px 11px; background: #090d16; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: #fff; font-size: 12px; box-sizing: border-box; outline: none; }
+        .jp-quick-mults { display: flex; gap: 5px; margin: 10px 0 16px; flex-wrap: wrap; }
+        .jp-quick-mults button { background: #1e293b; border: 1px solid rgba(255,255,255,0.08); color: #cbd5e1; padding: 5px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; cursor: pointer; }
+        .jp-modal-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 14px; }
+        .jp-btn-revert { background: #1f2937; border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; padding: 7px 12px; border-radius: 8px; font-size: 10.5px; font-weight: 800; cursor: pointer; }
+        .jp-btn-save { background: linear-gradient(135deg, #e11d48, #be123c); border: none; color: #fff; padding: 7px 14px; border-radius: 8px; font-size: 10.5px; font-weight: 800; cursor: pointer; }
 
         /* Toast */
-        .jp-admin-toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 12px; font-size: 13px; font-weight: 800; z-index: 100000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .jp-admin-toast { position: fixed; bottom: 20px; right: 20px; padding: 10px 16px; border-radius: 10px; font-size: 11.5px; font-weight: 800; z-index: 100000; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
         .jp-admin-toast-success { background: #065f46; color: #a7f3d0; border: 1px solid #10b981; }
         .jp-admin-toast-error { background: #881337; color: #fecdd3; border: 1px solid #f43f5e; }
 
