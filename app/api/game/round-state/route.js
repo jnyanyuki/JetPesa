@@ -16,6 +16,14 @@ export async function GET() {
       serverSeedHash: state.serverSeedHash,
       crashPoint: state.crashPoint,
       offsetMs: state.offsetMs,
+      startEpoch: state.startEpoch,
+      departureEpoch: state.departureEpoch,
+      crashEpoch: state.crashEpoch,
+      endEpoch: state.endEpoch,
+      flightDurationMs: state.flightDurationMs,
+      durationMs: state.durationMs,
+      remainingCountdownMs: state.remainingCountdownMs,
+      activeSeconds: state.activeSeconds,
     });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });

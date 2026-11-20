@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sql } from '../../../../lib/db';
 import { verifyAdminAuth } from '../../../../lib/adminAuth';
-import { getUpcomingRounds, getCycleState, setMemoryOverride, removeMemoryOverride } from '../../../../lib/gameEngine';
+import { getUpcomingRounds, getCycleState, setMemoryOverride, removeMemoryOverride, triggerInstantCrash } from '../../../../lib/gameEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -274,7 +274,7 @@ export async function POST(request) {
       const currentMult = state.isBettingPhase ? 1.00 : parseFloat((state.currentMultiplier || 1.00).toFixed(2));
       const targetPoint = crashPoint ? Math.max(1.0, parseFloat(Number(crashPoint).toFixed(2))) : currentMult;
 
-      setMemoryOverride(roundId, targetPoint);
+      triggerInstantCrash(roundId, targetPoint);
 
       await sql.query(`
         INSERT INTO public.round_overrides (round_id, crash_point, note)

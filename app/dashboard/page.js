@@ -270,6 +270,17 @@ export default function UltimateJetPesaCockpit() {
     houseEdge: 0.01,
   });
 
+  const activeRoundTimingRef = useRef({
+    cycleIndex: 0,
+    startEpoch: 0,
+    departureEpoch: 0,
+    crashEpoch: 0,
+    endEpoch: 0,
+    crashPoint: 2.0,
+    flightDurationMs: 10460,
+    durationMs: 18460,
+  });
+
   useEffect(() => {
     const svgPlane = `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 180">
@@ -482,11 +493,10 @@ export default function UltimateJetPesaCockpit() {
 
   const calculateMultiplierAtSeconds = (activeSeconds) => {
     if (activeSeconds <= 0) return 1.0;
-    // Uniform slowed progression for initial/mid range (standard industry Aviator curve),
-    // with smoothly accelerated rate for very high flight ranges (10x+ to 10,000x+):
-    const base = 0.045 * activeSeconds + 0.004 * Math.pow(activeSeconds, 2) + 0.00045 * Math.pow(activeSeconds, 3);
-    const highBoost = activeSeconds > 13 ? 0.0035 * Math.pow(activeSeconds - 13, 4.2) : 0;
-    const mult = Math.exp(base + highBoost);
+    // Continuous exponential curve: M(t) = exp(0.060*t + 0.0006*t^2)
+    // Allows completely natural, smooth flight simulation across both low and high crash ranges
+    const exponent = 0.060 * activeSeconds + 0.0006 * Math.pow(activeSeconds, 2);
+    const mult = Math.exp(exponent);
     return parseFloat(mult.toFixed(2));
   };
 
@@ -529,6 +539,16 @@ export default function UltimateJetPesaCockpit() {
           nonce: data.cycleIndex,
           crashPoint: Number(data.crashPoint || 2.0),
           serverSeedHash: data.serverSeedHash || currentRoundRef.current.serverSeedHash,
+        };
+        activeRoundTimingRef.current = {
+          cycleIndex: data.cycleIndex,
+          startEpoch: data.startEpoch,
+          departureEpoch: data.departureEpoch,
+          crashEpoch: data.crashEpoch,
+          endEpoch: data.endEpoch,
+          crashPoint: Number(data.crashPoint || 2.0),
+          flightDurationMs: data.flightDurationMs,
+          durationMs: data.durationMs,
         };
       }
     } catch (err) {
@@ -638,9 +658,7 @@ export default function UltimateJetPesaCockpit() {
 
     checkSessionAndSync();
     fetchRoundState();
-    const initEpoch = Date.now();
-    const initOffset = initEpoch % 24000;
-    startFreshLiveBetsFeed(initOffset);
+    startFreshLiveBetsFeed(1500);
 
     return () => {
       isMounted = false;
@@ -672,24 +690,39 @@ export default function UltimateJetPesaCockpit() {
   useEffect(() => {
     function runDistributedClockLoop() {
       const epochTimeMs = Date.now();
-      const cycleInterval = 24000;
       const countdownInterval = 5000;
-      const simulationWindow = 19000;
-      const cycleIndex = Math.floor(epochTimeMs / cycleInterval);
-      const offsetMs = epochTimeMs % cycleInterval;
+      let timing = activeRoundTimingRef.current;
 
-      if (lastCycleRef.current !== cycleIndex) {
+      // Ensure timing is initialized from server or derived anchor
+      const needsSync = !timing.departureEpoch || epochTimeMs >= timing.endEpoch;
+      if (needsSync || (epochTimeMs - lastStateCheckRef.current > 1200)) {
+        if (epochTimeMs - lastStateCheckRef.current > 600) {
+          lastStateCheckRef.current = epochTimeMs;
+          fetchRoundState();
+          timing = activeRoundTimingRef.current;
+        }
+      }
+
+      const cycleIndex = timing.cycleIndex || currentRoundRef.current.nonce || 0;
+      const effectiveCrash = timing.crashPoint || currentRoundRef.current.crashPoint || 2.0;
+
+      // Handle round transition to fresh cycle
+      if (lastCycleRef.current !== cycleIndex && cycleIndex > 0) {
         lastCycleRef.current = cycleIndex;
         cycleCrashedRef.current = false;
         crashTimestampRef.current = 0;
         queuedBetPendingRef.current = { A: false, B: false };
-        startFreshLiveBetsFeed(offsetMs);
-        fetchRoundState();
+        const elapsedCountdown = timing.startEpoch ? Math.max(0, epochTimeMs - timing.startEpoch) : 0;
+        startFreshLiveBetsFeed(elapsedCountdown);
       }
 
-      const effectiveCrash = currentRoundRef.current.crashPoint || 2.0;
+      const isBettingPhase = timing.departureEpoch ? epochTimeMs < timing.departureEpoch : true;
+      const isPastCrash = timing.crashEpoch ? epochTimeMs >= timing.crashEpoch : false;
 
-      if (offsetMs < countdownInterval) {
+      let secondsInAir = 0;
+      let isFlightActive = false;
+
+      if (isBettingPhase) {
         cycleCrashedRef.current = false;
         if (gameStatusRef.current !== 'idle') {
           gameStatusRef.current = 'idle';
@@ -698,10 +731,16 @@ export default function UltimateJetPesaCockpit() {
           playSynthesizedTone(440, 'triangle', 0.05, 0.03);
         }
 
-        // Visually increment LIVE players count and incoming bets dynamically during countdown
+        const remainingMs = timing.departureEpoch
+          ? Math.max(0, timing.departureEpoch - epochTimeMs)
+          : Math.max(0, countdownInterval - (epochTimeMs % countdownInterval));
+        const remSecStr = (remainingMs / 1000).toFixed(1);
+        const progressPct = Math.max(0, Math.min(100, (remainingMs / countdownInterval) * 100));
+
+        const elapsedInCountdown = countdownInterval - remainingMs;
         if (roundPoolBetsRef.current.length > 0) {
-          if (epochTimeMs - lastBetFeedUpdateRef.current > 45 || offsetMs > countdownInterval - 80) {
-            const visible = roundPoolBetsRef.current.filter((b) => b.joinedAtMs <= offsetMs);
+          if (epochTimeMs - lastBetFeedUpdateRef.current > 45 || remainingMs < 80) {
+            const visible = roundPoolBetsRef.current.filter((b) => b.joinedAtMs <= elapsedInCountdown);
             if (visible.length !== liveBetsFeedRef.current.length) {
               lastBetFeedUpdateRef.current = epochTimeMs;
               liveBetsFeedRef.current = visible;
@@ -711,10 +750,6 @@ export default function UltimateJetPesaCockpit() {
           }
         }
 
-        const remainingMs = Math.max(0, countdownInterval - offsetMs);
-        const remSecStr = (remainingMs / 1000).toFixed(1);
-        const progressPct = Math.max(0, Math.min(100, (remainingMs / countdownInterval) * 100));
-
         // Butter-smooth 60fps direct DOM updates
         if (progressFillRef.current) {
           progressFillRef.current.style.width = `${progressPct}%`;
@@ -722,14 +757,13 @@ export default function UltimateJetPesaCockpit() {
         if (countdownTextRef.current) {
           countdownTextRef.current.textContent = `${remSecStr}s`;
         }
-        // Throttled React state updates to prevent render thrashing
         if (epochTimeMs - lastThrottleTimeRef.current > 75) {
           lastThrottleTimeRef.current = epochTimeMs;
           setCountdownSeconds(remSecStr);
           setCountdownProgress(progressPct);
         }
 
-        if (offsetMs % 1000 < 20) playSynthesizedTone(320, 'sine', 0.03, 0.02);
+        if (remainingMs % 1000 < 20) playSynthesizedTone(320, 'sine', 0.03, 0.02);
         if (deckA.hasBetNext && !deckA.hasBetCurrent && !queuedBetPendingRef.current.A) {
           queuedBetPendingRef.current.A = true;
           placeQueuedBet('A', deckA);
@@ -738,79 +772,66 @@ export default function UltimateJetPesaCockpit() {
           queuedBetPendingRef.current.B = true;
           placeQueuedBet('B', deckB);
         }
-      } else if (offsetMs < countdownInterval + simulationWindow) {
-        // Ensure all round pool bets are locked in as flight takes off
+      } else if (!isPastCrash && !cycleCrashedRef.current) {
+        // FLIGHT IN PROGRESS
+        isFlightActive = true;
+        secondsInAir = Math.max(0, (epochTimeMs - (timing.departureEpoch || (epochTimeMs - 100))) / 1000);
+
         if (roundPoolBetsRef.current.length > 0 && liveBetsFeedRef.current.length !== roundPoolBetsRef.current.length) {
           liveBetsFeedRef.current = roundPoolBetsRef.current;
           setLiveBetsFeed(roundPoolBetsRef.current);
           setActivePlayersCount(roundPoolBetsRef.current.length);
         }
 
-        if (cycleCrashedRef.current) {
-          // Stay cleanly crashed until the next cycle's single pre-flight countdown
-          if (gameStatusRef.current !== 'crashed') {
-            gameStatusRef.current = 'crashed';
-            setGameStatus('crashed');
-            setMultiplier(effectiveCrash);
-          }
+        const computedMultiplier = calculateMultiplierAtSeconds(secondsInAir);
+
+        if (computedMultiplier >= effectiveCrash) {
+          cycleCrashedRef.current = true;
+          crashTimestampRef.current = epochTimeMs;
+          gameStatusRef.current = 'crashed';
+          setGameStatus('crashed');
+          setMultiplier(effectiveCrash);
+          updateLiveBetStatuses(effectiveCrash, effectiveCrash);
+          markLiveBetsCrashed();
+          persistCrashToHistory(effectiveCrash, cycleIndex);
+          setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
         } else {
-          // Periodically sync live round state from server to catch crash points dynamically
-          if (epochTimeMs - lastStateCheckRef.current > 1200) {
-            lastStateCheckRef.current = epochTimeMs;
-            fetch('/api/game/round-state', { cache: 'no-store' })
-              .then((r) => r.json())
-              .then((st) => {
-                if (st?.success && st?.crashPoint) {
-                  currentRoundRef.current.crashPoint = Number(st.crashPoint);
-                }
-              })
-              .catch(() => {});
+          if (gameStatusRef.current !== 'running') {
+            gameStatusRef.current = 'running';
+            setGameStatus('running');
           }
+          setMultiplier(computedMultiplier);
+          updateLiveBetStatuses(computedMultiplier, effectiveCrash);
+          if (epochTimeMs % 300 < 20) playSynthesizedTone(200 + computedMultiplier * 15, 'sine', 0.015, 0.012);
 
-          const activeSeconds = (offsetMs - countdownInterval) / 1000;
-          const computedMultiplier = calculateMultiplierAtSeconds(activeSeconds);
-
-          if (computedMultiplier >= effectiveCrash) {
-            cycleCrashedRef.current = true;
-            crashTimestampRef.current = epochTimeMs;
-            gameStatusRef.current = 'crashed';
-            setGameStatus('crashed');
-            setMultiplier(effectiveCrash);
-            updateLiveBetStatuses(effectiveCrash, effectiveCrash);
-            markLiveBetsCrashed();
-            persistCrashToHistory(effectiveCrash, cycleIndex);
-            setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
-            setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
-          } else {
-            if (gameStatusRef.current !== 'running') {
-              gameStatusRef.current = 'running';
-              setGameStatus('running');
+          setDeckA((p) => {
+            if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
+              triggerPayoutSequence('A', computedMultiplier, p);
+              return { ...p, hasBetCurrent: false, currentBetId: null };
             }
-            setMultiplier(computedMultiplier);
-            updateLiveBetStatuses(computedMultiplier, effectiveCrash);
-            if (offsetMs % 300 < 20) playSynthesizedTone(200 + computedMultiplier * 15, 'sine', 0.015, 0.012);
-            setDeckA((p) => {
-              if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
-                triggerPayoutSequence('A', computedMultiplier, p);
-                return { ...p, hasBetCurrent: false, currentBetId: null };
-              }
-              return p;
-            });
-            setDeckB((p) => {
-              if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
-                triggerPayoutSequence('B', computedMultiplier, p);
-                return { ...p, hasBetCurrent: false, currentBetId: null };
-              }
-              return p;
-            });
-          }
+            return p;
+          });
+          setDeckB((p) => {
+            if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
+              triggerPayoutSequence('B', computedMultiplier, p);
+              return { ...p, hasBetCurrent: false, currentBetId: null };
+            }
+            return p;
+          });
         }
       } else {
+        // POST-CRASH PAUSE (before next round)
+        isFlightActive = true;
+        secondsInAir = timing.flightDurationMs ? timing.flightDurationMs / 1000 : 0;
         cycleCrashedRef.current = true;
+        if (!crashTimestampRef.current) crashTimestampRef.current = timing.crashEpoch || epochTimeMs;
+
         if (gameStatusRef.current !== 'crashed') {
           gameStatusRef.current = 'crashed';
           setGameStatus('crashed');
           setMultiplier(effectiveCrash);
+          updateLiveBetStatuses(effectiveCrash, effectiveCrash);
           markLiveBetsCrashed();
           persistCrashToHistory(effectiveCrash, cycleIndex);
           setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
@@ -818,7 +839,7 @@ export default function UltimateJetPesaCockpit() {
         }
       }
 
-      renderRadarCanvas(offsetMs, countdownInterval);
+      renderRadarCanvas(secondsInAir, isFlightActive);
       animationId.current = requestAnimationFrame(runDistributedClockLoop);
     }
 
@@ -849,7 +870,7 @@ export default function UltimateJetPesaCockpit() {
     ctx.restore();
   };
 
-  const renderRadarCanvas = (offsetMs, countdownLimit) => {
+  const renderRadarCanvas = (secondsInAir = 0, isFlightActive = false) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const parent = canvas.parentElement;
@@ -881,8 +902,7 @@ export default function UltimateJetPesaCockpit() {
       ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(W, j); ctx.stroke();
     }
 
-    if (offsetMs >= countdownLimit && gameStatusRef.current !== 'idle') {
-      const secondsInAir = (offsetMs - countdownLimit) / 1000;
+    if (isFlightActive && gameStatusRef.current !== 'idle') {
       drawRain(ctx, W, H, secondsInAir);
 
       const isCrashed = gameStatus === 'crashed' || cycleCrashedRef.current;
