@@ -8,14 +8,14 @@ export async function POST(request) {
   try {
     // 1. Webhook Secret Validation
     const expectedSecret = process.env.PRINTPAY_WEBHOOK_SECRET;
-    if (expectedSecret) {
-      const { searchParams } = new URL(request.url);
-      const querySecret = searchParams.get('secret');
-      const headerSecret = request.headers.get('x-webhook-secret');
-      if (querySecret !== expectedSecret && headerSecret !== expectedSecret) {
-        console.warn('Unauthorized B2C webhook attempt: invalid or missing secret');
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
+    const { searchParams } = new URL(request.url);
+    const querySecret = searchParams.get('secret');
+    const headerSecret = request.headers.get('x-webhook-secret');
+    const isSecretValid = Boolean(expectedSecret && (querySecret === expectedSecret || headerSecret === expectedSecret));
+
+    if (expectedSecret && !isSecretValid) {
+      console.warn('Unauthorized B2C webhook attempt: invalid or missing secret');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json().catch(() => ({}));

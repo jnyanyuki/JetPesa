@@ -8,14 +8,14 @@ export async function POST(request) {
   try {
     // 1. Webhook Secret Validation
     const expectedSecret = process.env.PRINTPAY_WEBHOOK_SECRET;
-    if (expectedSecret) {
-      const { searchParams } = new URL(request.url);
-      const querySecret = searchParams.get('secret');
-      const headerSecret = request.headers.get('x-webhook-secret');
-      if (querySecret !== expectedSecret && headerSecret !== expectedSecret) {
-        console.warn('Unauthorized webhook attempt: invalid or missing secret');
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
+    const { searchParams } = new URL(request.url);
+    const querySecret = searchParams.get('secret');
+    const headerSecret = request.headers.get('x-webhook-secret');
+    const isSecretValid = Boolean(expectedSecret && (querySecret === expectedSecret || headerSecret === expectedSecret));
+
+    if (expectedSecret && !isSecretValid) {
+      console.warn('Unauthorized webhook attempt: invalid or missing secret');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json().catch(() => ({}));
@@ -99,7 +99,13 @@ export async function POST(request) {
     }
 
     // SCENARIO 2: Offline / Manual Paybill (Identified via Sender's Phone Number)
+    // Offline crediting without an STK checkoutId strictly requires webhook secret authentication
     if (rawPhone && amt > 0) {
+      if (!isSecretValid) {
+        console.warn('Offline Paybill deposit rejected: webhook secret required for offline ledger matching');
+        return NextResponse.json({ error: 'Webhook secret required for offline paybill notifications' }, { status: 401 });
+      }
+
       let localPhone = '';
       let intlPhone = '';
       try {
