@@ -25,6 +25,7 @@ export default function JetPesaAdminPage() {
 
   const [overrideModal, setOverrideModal] = useState({ open: false, cycleIndex: null, currentPoint: 2.0, newPoint: '' });
   const [adjustModal, setAdjustModal] = useState({ open: false, user: null, amount: '', reason: '' });
+  const [instantCrashing, setInstantCrashing] = useState(false);
   const [toast, setToast] = useState(null);
 
   const pollTimerRef = useRef(null);
@@ -216,6 +217,40 @@ export default function JetPesaAdminPage() {
       loadRoundsRadar();
     } catch (err) {
       showToast(err.message, 'error');
+    }
+  };
+
+  // Instant Crash Current Active Flight Round
+  const handleInstantCrash = async () => {
+    const curRoundId = inFlightStats?.roundId || currentCycleState?.currentCycleIndex || currentCycleState?.cycleIndex;
+    if (!curRoundId) return;
+
+    if (inFlightStats?.hasCrashed) {
+      showToast('Current round has already ended.', 'error');
+      return;
+    }
+
+    setInstantCrashing(true);
+    try {
+      const curMultiplier = inFlightStats?.multiplier || currentCycleState?.currentMultiplier || 1.0;
+      const res = await adminFetch('/api/admin/rounds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cycleIndex: curRoundId,
+          instantCrash: true,
+          crashPoint: inFlightStats?.isBettingPhase ? 1.0 : curMultiplier,
+          note: 'Instant crash triggered via Admin Cockpit',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Instant crash failed.');
+      showToast(data.message || `🚨 Round #${curRoundId} instantly crashed!`);
+      await loadRoundsRadar();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setInstantCrashing(false);
     }
   };
 
@@ -455,6 +490,19 @@ export default function JetPesaAdminPage() {
                       </h3>
                     </div>
                   </div>
+
+                  {/* Midway: Instant Crash Button */}
+                  <div className="jp-instant-crash-midway">
+                    <button
+                      className="jp-btn-instant-crash"
+                      disabled={inFlightStats?.hasCrashed || instantCrashing}
+                      onClick={handleInstantCrash}
+                      title="Immediately crash active flight round"
+                    >
+                      {instantCrashing ? 'CRASHING...' : inFlightStats?.hasCrashed ? '✕ CRASHED' : '🚨 CRASH NOW'}
+                    </button>
+                  </div>
+
                   <span className="jp-tag-natural" style={{ fontSize: '8.5px', color: '#38bdf8' }}>
                     Real Pilots
                   </span>
@@ -1304,6 +1352,36 @@ export default function JetPesaAdminPage() {
         .jp-kpi-sublabel { font-size: 8.5px; font-weight: 800; color: #94a3b8; letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
         .jp-inflight-empty-min { text-align: center; padding: 16px 12px; background: rgba(4, 7, 15, 0.4); border: 1px dashed rgba(255, 255, 255, 0.08); border-radius: 8px; font-size: 10px; color: #64748b; margin-top: 8px; }
         .jp-inflight-scroll { max-height: 140px; overflow-y: auto; margin-top: 8px; }
+        .jp-instant-crash-midway { display: flex; align-items: center; justify-content: center; }
+        .jp-btn-instant-crash {
+          background: linear-gradient(135deg, #e11d48, #9f1239);
+          color: #fff;
+          border: 1px solid rgba(244, 63, 94, 0.5);
+          font-size: 9px;
+          font-weight: 900;
+          letter-spacing: 0.04em;
+          padding: 4px 10px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          box-shadow: 0 0 10px rgba(225, 29, 72, 0.4);
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        }
+        .jp-btn-instant-crash:hover:not(:disabled) {
+          background: linear-gradient(135deg, #f43f5e, #be123c);
+          box-shadow: 0 0 16px rgba(244, 63, 94, 0.7);
+          transform: translateY(-1px);
+        }
+        .jp-btn-instant-crash:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+          box-shadow: none;
+          background: #1f2937;
+          border-color: rgba(255, 255, 255, 0.1);
+          color: #94a3b8;
+        }
         .jp-date-picker-input { background: #090d16; border: 1px solid rgba(255, 255, 255, 0.12); color: #cbd5e1; font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 6px; outline: none; }
         .jp-mini-tab-btn { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); color: #94a3b8; font-size: 9.5px; font-weight: 800; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
         .jp-mini-tab-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }

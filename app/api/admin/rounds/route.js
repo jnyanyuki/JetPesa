@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sql } from '../../../../lib/db';
 import { verifyAdminAuth } from '../../../../lib/adminAuth';
-import { getUpcomingRounds, setMemoryOverride, removeMemoryOverride } from '../../../../lib/gameEngine';
+import { getUpcomingRounds, getCycleState, setMemoryOverride, removeMemoryOverride } from '../../../../lib/gameEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -260,13 +260,49 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { cycleIndex, crashPoint, note } = body;
+    const { cycleIndex, crashPoint, note, instantCrash } = body;
 
     if (!cycleIndex) {
       return NextResponse.json({ success: false, message: 'cycleIndex is required.' }, { status: 400 });
     }
 
     const roundId = String(cycleIndex);
+
+    // Instant crash trigger for active round
+    if (instantCrash) {
+      const state = getCycleState();
+      const currentMult = state.isBettingPhase ? 1.00 : parseFloat((state.currentMultiplier || 1.00).toFixed(2));
+      const targetPoint = crashPoint ? Math.max(1.0, parseFloat(Number(crashPoint).toFixed(2))) : currentMult;
+
+      setMemoryOverride(roundId, targetPoint);
+
+      await sql.query(`
+        INSERT INTO public.round_overrides (round_id, crash_point, note)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (round_id) DO UPDATE SET
+          crash_point = EXCLUDED.crash_point,
+          note = EXCLUDED.note,
+          created_at = NOW()
+      `, [roundId, targetPoint, note || 'Admin Instant Crash']);
+
+      // Immediately resolve any ACTIVE bets for this round as CRASHED
+      try {
+        await sql.query(`
+          UPDATE public.bets 
+          SET status = 'CRASHED' 
+          WHERE status = 'ACTIVE' AND round_id = $1
+        `, [roundId]);
+      } catch (e) {
+        console.warn('Could not mark bets crashed on instant crash:', e.message);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Round #${roundId} instantly crashed @ ${targetPoint.toFixed(2)}x!`,
+        roundId,
+        crashPoint: targetPoint,
+      });
+    }
 
     // If crashPoint is null, 0 or 'reset', remove the override
     if (crashPoint === null || crashPoint === undefined || crashPoint === 0 || crashPoint === 'reset') {
