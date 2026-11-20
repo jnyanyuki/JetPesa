@@ -346,46 +346,96 @@ export default function UltimateJetPesaCockpit() {
     }
   }, [audioMuted]);
 
-  const generateFreshLiveBets = useCallback(() => {
+  const generateFreshLiveBets = useCallback((roundCrashPoint = null) => {
     const px = ['070***', '071***', '072***', '079***', '011***', '074***', '010***', '075***', '076***', '078***'];
     // Dynamically derive active round wagers from active lobby traffic (~25% to 75.0% participation rate)
     const currentLobby = lobbyOnlineCountRef.current || 3200;
-    const participationRate = 0.25 + Math.random() * 0.50; // ~25% to 75.0% round participation rate against the live room size
+    const participationRate = 0.25 + Math.random() * 0.50;
     const count = Math.max(100, Math.floor(currentLobby * participationRate));
     const bets = [];
 
+    const effectiveCrash = Number(
+      roundCrashPoint ||
+      activeRoundTimingRef.current.crashPoint ||
+      currentRoundRef.current.crashPoint ||
+      2.0
+    );
+
+    // Realistic Kenyan market staking distribution (clean denominations matching actual mobile betting):
+    const generateMarketStake = () => {
+      const r = Math.random();
+      if (r < 0.60) {
+        // 60% casual / micro stakes (KES 10 - KES 100)
+        const opts = [10, 10, 20, 20, 20, 30, 40, 50, 50, 50, 70, 80, 100, 100, 100, 100];
+        return opts[Math.floor(Math.random() * opts.length)];
+      } else if (r < 0.86) {
+        // 26% standard everyday stakes (KES 120 - KES 500)
+        const opts = [120, 150, 150, 200, 200, 200, 250, 300, 350, 400, 500, 500];
+        return opts[Math.floor(Math.random() * opts.length)];
+      } else if (r < 0.96) {
+        // 10% mid-tier wagers (KES 600 - KES 1,500)
+        const opts = [600, 750, 800, 1000, 1000, 1200, 1500];
+        return opts[Math.floor(Math.random() * opts.length)];
+      } else {
+        // 4% high roller wagers (KES 2,000 - KES 5,000)
+        const opts = [2000, 2500, 3000, 5000];
+        return opts[Math.floor(Math.random() * opts.length)];
+      }
+    };
+
     for (let i = 0; i < count; i++) {
       const id = Math.random().toString(36).substring(2, 8);
-      const rand = Math.random();
-      let target;
+      const stake = generateMarketStake();
 
-      // Realistic distribution starting with lowest multipliers:
-      // ~45% low multipliers (1.04x - 1.28x)
-      // ~30% mid multipliers (1.29x - 2.05x)
-      // ~15% high multipliers (2.06x - 4.50x)
-      // ~10% moonshot multipliers (4.51x - 18.00x)
-      if (rand < 0.45) {
-        target = parseFloat((1.04 + Math.random() * 0.24).toFixed(2));
-      } else if (rand < 0.75) {
-        target = parseFloat((1.29 + Math.random() * 0.76).toFixed(2));
-      } else if (rand < 0.90) {
-        target = parseFloat((2.06 + Math.random() * 2.44).toFixed(2));
-      } else {
-        target = parseFloat((4.51 + Math.random() * 13.49).toFixed(2));
+      // Determine if this pilot will successfully cash out or crash with the plane
+      let willCashOut = false;
+      if (effectiveCrash > 1.02) {
+        let winRate;
+        if (effectiveCrash <= 1.25) winRate = 0.25;
+        else if (effectiveCrash <= 1.60) winRate = 0.38;
+        else if (effectiveCrash <= 2.50) winRate = 0.48;
+        else if (effectiveCrash <= 5.00) winRate = 0.58;
+        else if (effectiveCrash <= 20.0) winRate = 0.65;
+        else winRate = 0.70;
+
+        willCashOut = Math.random() < winRate;
       }
 
-      // Tiered realistic staking:
-      // ~50% retail wagers: KES 50 - KES 450
-      // ~35% core wagers: KES 500 - KES 2,500
-      // ~15% high-rollers: KES 3,000 - KES 15,000
-      const stakeRand = Math.random();
-      let stake;
-      if (stakeRand < 0.50) {
-        stake = Math.floor(Math.random() * 41 + 5) * 10;
-      } else if (stakeRand < 0.85) {
-        stake = Math.floor(Math.random() * 41 + 10) * 50;
+      let target;
+      if (willCashOut) {
+        // Cashing out pilot: smoothly distributed along the graph [1.02x to 0.98 * effectiveCrash]
+        const maxCashout = parseFloat(Math.max(1.02, effectiveCrash - 0.01).toFixed(2));
+        const minCashout = 1.02;
+        const spread = maxCashout - minCashout;
+
+        if (spread <= 0.01) {
+          target = minCashout;
+        } else {
+          // Curved distribution gives steady, thrilling cashout pulses throughout the flight
+          const u = Math.random();
+          const curved = Math.pow(u, 1.35);
+          target = parseFloat((minCashout + curved * spread).toFixed(2));
+          if (target >= effectiveCrash) {
+            target = parseFloat((effectiveCrash - 0.01).toFixed(2));
+          }
+        }
       } else {
-        stake = Math.floor(Math.random() * 25 + 6) * 500;
+        // Pilots who do NOT cash out before crash point (greedier target or manual hold)
+        // These pilots remain active in flight and turn to 'lost' when the plane crashes!
+        const greedRand = Math.random();
+        if (greedRand < 0.50) {
+          // Just missed: target slightly above crash point
+          target = parseFloat((effectiveCrash * (1.02 + Math.random() * 0.78)).toFixed(2));
+        } else if (greedRand < 0.82) {
+          // Mid-greed: waiting for higher multiplier
+          target = parseFloat((effectiveCrash * (1.8 + Math.random() * 2.2)).toFixed(2));
+        } else {
+          // Moonshot hunters: waiting for 10x - 100x+
+          target = parseFloat((Math.max(12, effectiveCrash * 2.5) + Math.random() * 75).toFixed(2));
+        }
+        if (target <= effectiveCrash) {
+          target = parseFloat((effectiveCrash + 0.05).toFixed(2));
+        }
       }
 
       // Stagger joinedAtMs across the 5000ms countdown:
@@ -405,16 +455,23 @@ export default function UltimateJetPesaCockpit() {
         payout: 0,
         status: 'queued',
         joinedAtMs,
+        willCashOut,
       });
     }
 
-    // Sort ascending: start with lowest multipliers at the top per round
-    bets.sort((a, b) => a.cashoutTarget - b.cashoutTarget);
+    // Natural table ordering by bet placement time during countdown
+    bets.sort((a, b) => a.joinedAtMs - b.joinedAtMs);
     return bets;
   }, []);
 
-  const startFreshLiveBetsFeed = useCallback((initialOffsetMs = 0) => {
-    const bets = generateFreshLiveBets();
+  const startFreshLiveBetsFeed = useCallback((initialOffsetMs = 0, customCrash = null) => {
+    const effectiveCrash = Number(
+      customCrash ||
+      activeRoundTimingRef.current.crashPoint ||
+      currentRoundRef.current.crashPoint ||
+      2.0
+    );
+    const bets = generateFreshLiveBets(effectiveCrash);
     roundPoolBetsRef.current = bets;
     const visible = bets.filter((b) => b.joinedAtMs <= initialOffsetMs);
     liveBetsFeedRef.current = visible;
@@ -713,7 +770,7 @@ export default function UltimateJetPesaCockpit() {
         crashTimestampRef.current = 0;
         queuedBetPendingRef.current = { A: false, B: false };
         const elapsedCountdown = timing.startEpoch ? Math.max(0, epochTimeMs - timing.startEpoch) : 0;
-        startFreshLiveBetsFeed(elapsedCountdown);
+        startFreshLiveBetsFeed(elapsedCountdown, effectiveCrash);
       }
 
       const isBettingPhase = timing.departureEpoch ? epochTimeMs < timing.departureEpoch : true;
