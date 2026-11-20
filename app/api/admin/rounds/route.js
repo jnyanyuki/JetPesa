@@ -12,7 +12,7 @@ export async function GET(request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const count = Math.min(50, Math.max(1, parseInt(searchParams.get('count') || '15', 10)));
+    const count = Math.min(50, Math.max(1, parseInt(searchParams.get('count') || '6', 10)));
     const startNonce = searchParams.get('startNonce') ? parseInt(searchParams.get('startNonce'), 10) : null;
     const pastCount = Math.min(20, Math.max(1, parseInt(searchParams.get('pastCount') || '5', 10)));
 

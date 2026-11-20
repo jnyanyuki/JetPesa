@@ -80,10 +80,10 @@ export default function JetPesaAdminPage() {
     return fetch(url, { ...options, headers });
   }, []);
 
-  // Fetch Radar (Current + Next 15 Rounds + Last 5 Past Rounds)
+  // Fetch Radar (Current + Next 6 Rounds + Last 5 Past Rounds)
   const loadRoundsRadar = useCallback(async () => {
     try {
-      const res = await adminFetch('/api/admin/rounds?count=15&pastCount=5');
+      const res = await adminFetch('/api/admin/rounds?count=6&pastCount=5');
       const data = await res.json();
       if (data.success) {
         setRoundsData(data.rounds || []);
@@ -325,10 +325,10 @@ export default function JetPesaAdminPage() {
               <span className="jp-tele-divider">|</span>
               <span style={{ color: currentCycleState.hasCrashed ? '#f43f5e' : currentCycleState.isBettingPhase ? '#fbbf24' : '#22c55e', fontWeight: 900 }}>
                 {currentCycleState.hasCrashed
-                  ? `CRASHED @ ${currentCycleState.currentCrashPoint || currentCycleState.multiplier}x`
+                  ? `CRASHED @ ${(currentCycleState.crashPoint || currentCycleState.currentCrashPoint || currentCycleState.currentMultiplier || 1.0).toFixed(2)}x`
                   : currentCycleState.isBettingPhase
                   ? 'COUNTDOWN'
-                  : `FLYING @ ${currentCycleState.multiplier}x`}
+                  : `FLYING @ ${(currentCycleState.currentMultiplier || currentCycleState.multiplier || 1.0).toFixed(2)}x`}
               </span>
             </div>
           ) : (
@@ -485,81 +485,67 @@ export default function JetPesaAdminPage() {
               )}
             </section>
 
-            {/* Upcoming 15 Rounds Schedule Table */}
-            <section className="jp-admin-panel">
-              <div className="jp-panel-header">
-                <h3>Flight Departure Schedule (Next 15 Rounds)</h3>
+            {/* Flight Departure Schedule (Next 6 Rounds) */}
+            <section className="jp-admin-history-strip">
+              <div className="jp-history-strip-header">
+                <div className="jp-history-strip-title">
+                  <span className="jp-history-clock-icon">🚀</span>
+                  <h3>Flight Departure Schedule (Next 6 Rounds)</h3>
+                </div>
                 <span className="jp-panel-note">Live updating every 2.5s</span>
               </div>
 
-              <div className="jp-table-wrap">
-                <table className="jp-admin-table">
-                  <thead>
-                    <tr>
-                      <th>Status</th>
-                      <th>Round #</th>
-                      <th>Takeoff In</th>
-                      <th>Crash Point</th>
-                      <th>Category</th>
-                      <th>Override Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {roundsData.map((r) => (
-                      <tr key={r.cycleIndex} className={r.isCurrent ? 'row-current' : ''}>
-                        <td>
+              {roundsData.length === 0 ? (
+                <div className="jp-history-empty">
+                  <span>Calculating upcoming departure sequence...</span>
+                </div>
+              ) : (
+                <div className="jp-history-cards-grid">
+                  {roundsData.slice(0, 6).map((r) => (
+                    <div
+                      key={r.cycleIndex}
+                      className={`jp-history-card border-${r.category.toLowerCase()} ${r.isCurrent ? 'jp-card-live' : ''}`}
+                    >
+                      <div className="jp-history-card-top">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span className="jp-history-round-label">Round #{r.cycleIndex}</span>
                           {r.isCurrent ? (
-                            <span className="jp-status-pill pill-live">● LIVE NOW</span>
+                            <span className="jp-status-pill pill-live">● LIVE</span>
                           ) : (
-                            <span className="jp-status-pill pill-queued">QUEUED</span>
+                            <span className="jp-status-pill pill-queued">⏱ ~{r.secondsUntilDeparture}s</span>
                           )}
-                        </td>
-                        <td>
-                          <strong>#{r.cycleIndex}</strong>
-                        </td>
-                        <td>
-                          {r.isCurrent ? (
-                            <span style={{ color: '#22c55e', fontWeight: 800 }}>In Flight / Active</span>
-                          ) : (
-                            <span>{r.secondsUntilDeparture}s</span>
-                          )}
-                        </td>
-                        <td>
-                          <span className={`jp-table-mult mult-${r.category.toLowerCase()}`}>
-                            {r.crashPoint.toFixed(2)}x
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`jp-cat-badge badge-${r.category.toLowerCase()}`}>
-                            {r.category}
-                          </span>
-                        </td>
-                        <td>
-                          {r.isOverridden ? (
-                            <span className="jp-tag-override">Overridden</span>
-                          ) : (
-                            <span className="jp-tag-natural">Provably Fair</span>
-                          )}
-                        </td>
-                        <td>
-                          <button
-                            className="jp-sm-btn"
-                            onClick={() => setOverrideModal({
-                              open: true,
-                              cycleIndex: r.cycleIndex,
-                              currentPoint: r.crashPoint,
-                              newPoint: r.crashPoint.toString(),
-                            })}
-                          >
-                            Set Multiplier
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        </div>
+                        <span className={`jp-cat-badge badge-${r.category.toLowerCase()}`}>
+                          {r.category}
+                        </span>
+                      </div>
+                      <div className="jp-history-card-body">
+                        <span className={`jp-history-mult-num mult-${r.category.toLowerCase()}`}>
+                          {r.crashPoint.toFixed(2)}x
+                        </span>
+                      </div>
+                      <div className="jp-history-card-footer">
+                        {r.isOverridden ? (
+                          <span className="jp-tag-override-sm">Overridden</span>
+                        ) : (
+                          <span className="jp-tag-natural-sm">Provably Fair</span>
+                        )}
+                        <button
+                          className="jp-sm-btn"
+                          onClick={() => setOverrideModal({
+                            open: true,
+                            cycleIndex: r.cycleIndex,
+                            currentPoint: r.crashPoint,
+                            newPoint: r.crashPoint.toString(),
+                          })}
+                        >
+                          Set Multiplier
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           </div>
         )}
@@ -1044,6 +1030,7 @@ export default function JetPesaAdminPage() {
         .jp-history-card.border-low { border-left: 3px solid #60a5fa; }
         .jp-history-card.border-high { border-left: 3px solid #c084fc; }
         .jp-history-card.border-mega { border-left: 3px solid #fbbf24; }
+        .jp-history-card.jp-card-live { background: rgba(34, 197, 94, 0.08); border-color: rgba(34, 197, 94, 0.4); box-shadow: 0 0 16px rgba(34, 197, 94, 0.12); }
         .jp-history-card-top { display: flex; align-items: center; justify-content: space-between; }
         .jp-history-round-label { font-size: 9.5px; font-weight: 800; color: #94a3b8; }
         .jp-history-card-body { margin: 2px 0; }
