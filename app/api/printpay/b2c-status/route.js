@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { adminDb, FieldValue } from '../../../../lib/firebaseAdmin';
+import { sql, withTransaction } from '../../../../lib/db';
 import { checkPrintPayB2CStatus } from '../../../../lib/printpay';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   try {
@@ -13,34 +15,22 @@ export async function POST(request) {
       );
     }
 
-    let withdrawalRef;
-    let withdrawalData;
-
+    let rows = [];
     if (withdrawalId) {
-      withdrawalRef = adminDb.collection('withdrawals').doc(withdrawalId);
-      const snap = await withdrawalRef.get();
-      if (snap.exists) withdrawalData = snap.data();
+      rows = await sql.query(`SELECT * FROM public.withdrawals WHERE id = $1 LIMIT 1`, [withdrawalId]);
+    }
+    if (!rows.length && conversationId) {
+      rows = await sql.query(`SELECT * FROM public.withdrawals WHERE conversation_id = $1 LIMIT 1`, [conversationId]);
     }
 
-    if (!withdrawalData && conversationId) {
-      const snap = await adminDb
-        .collection('withdrawals')
-        .where('conversationId', '==', conversationId)
-        .limit(1)
-        .get();
-
-      if (!snap.empty) {
-        withdrawalRef = snap.docs[0].ref;
-        withdrawalData = snap.docs[0].data();
-      }
-    }
-
-    if (!withdrawalData) {
+    if (!rows.length) {
       return NextResponse.json(
         { success: false, message: 'Withdrawal record not found.' },
         { status: 404 }
       );
     }
+
+    const withdrawalData = rows[0];
 
     if (withdrawalData.status === 'completed') {
       return NextResponse.json({
@@ -51,7 +41,7 @@ export async function POST(request) {
       });
     }
 
-    const convId = withdrawalData.conversationId || conversationId;
+    const convId = withdrawalData.conversation_id || conversationId;
     if (!convId) {
       return NextResponse.json({
         success: true,
@@ -60,60 +50,59 @@ export async function POST(request) {
       });
     }
 
-    // Poll live status from PrintPay B2C API
+    // Poll PrintPay B2C API for live status
     const liveStatus = await checkPrintPayB2CStatus(convId);
-    const txStatus = String(liveStatus?.transaction_status || '').toUpperCase();
-    const resultCode = liveStatus?.result_code;
+    const apiTxStatus = String(liveStatus?.transaction_status || '').toUpperCase();
+    const resultCode = liveStatus?.result_code !== undefined ? Number(liveStatus.result_code) : null;
+    const receipt = liveStatus?.receipt || liveStatus?.mpesa_receipt || null;
 
-    if (txStatus === 'COMPLETED' || resultCode === 0) {
-      await withdrawalRef.update({
-        status: 'completed',
-        receipt: liveStatus.receipt || null,
-        liveStatusResponse: liveStatus,
-        updatedAt: new Date().toISOString(),
-      });
+    if (apiTxStatus === 'COMPLETED' || resultCode === 0) {
+      await sql.query(`
+        UPDATE public.withdrawals 
+        SET status = 'completed', receipt = COALESCE($1, receipt), updated_at = NOW() 
+        WHERE id = $2
+      `, [receipt, withdrawalData.id]);
 
       return NextResponse.json({
         success: true,
         status: 'completed',
-        receipt: liveStatus.receipt,
-        message: 'Withdrawal successfully processed and delivered to phone.',
+        receipt,
+        liveStatus,
       });
     }
 
-    if (txStatus === 'FAILED' || (resultCode !== undefined && resultCode !== 0)) {
-      // Automatic refund to user's wallet balance if not already refunded
-      if (!withdrawalData.refunded) {
-        const userRef = adminDb.collection('users').doc(withdrawalData.userId);
+    if (apiTxStatus === 'FAILED' || (resultCode !== null && resultCode !== 0)) {
+      if (withdrawalData.status !== 'failed') {
+        await withTransaction(async (client) => {
+          await client.query(`
+            UPDATE public.users 
+            SET wallet_balance = wallet_balance + $1, updated_at = NOW() 
+            WHERE id = $2
+          `, [Number(withdrawalData.amount), withdrawalData.user_id]);
 
-        await adminDb.runTransaction(async (t) => {
-          t.update(userRef, {
-            walletBalance: FieldValue.increment(withdrawalData.amount),
-          });
-          t.update(withdrawalRef, {
-            status: 'failed',
-            refunded: true,
-            failureReason: liveStatus.result_desc || 'Payout failed.',
-            liveStatusResponse: liveStatus,
-            updatedAt: new Date().toISOString(),
-          });
+          await client.query(`
+            UPDATE public.withdrawals 
+            SET status = 'failed', failure_reason = $1, updated_at = NOW() 
+            WHERE id = $2
+          `, [liveStatus?.result_desc || liveStatus?.message || 'Payout failed.', withdrawalData.id]);
         });
       }
 
       return NextResponse.json({
         success: true,
         status: 'failed',
-        failureReason: liveStatus.result_desc || 'Payout failed. Wallet balance has been refunded.',
+        failureReason: liveStatus?.result_desc || liveStatus?.message || 'Payout failed.',
+        liveStatus,
       });
     }
 
     return NextResponse.json({
       success: true,
-      status: 'processing',
-      message: 'Withdrawal is currently being processed by Safaricom.',
+      status: 'pending',
+      liveStatus,
     });
   } catch (error) {
-    console.error('PrintPay B2C Status Check Error:', error);
+    console.error('B2C Status Check Error:', error);
     return NextResponse.json(
       { success: false, message: error.message },
       { status: 500 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { adminDb } from '../../../../lib/firebaseAdmin';
+import { sql } from '../../../../lib/db';
 import { normalizeKenyanPhone } from '../../../../lib/printpay';
 
 export const dynamic = 'force-dynamic';
@@ -22,27 +22,16 @@ export async function POST(request) {
       localPhone = String(rawPhone).trim();
     }
 
-    // Query users collection with admin privileges
-    let userQuery = await adminDb
-      .collection('users')
-      .where('mpesaPhone', '==', localPhone)
-      .limit(1)
-      .get();
+    const rows = await sql.query(
+      `SELECT id, email, phone FROM public.users WHERE phone = $1 OR phone = $2 LIMIT 1`,
+      [localPhone, intlPhone]
+    );
 
-    if (userQuery.empty && intlPhone) {
-      userQuery = await adminDb
-        .collection('users')
-        .where('mpesaPhone', '==', intlPhone)
-        .limit(1)
-        .get();
-    }
-
-    if (userQuery.empty) {
+    if (!rows.length) {
       return NextResponse.json({ error: 'No account found with that phone number.' }, { status: 404 });
     }
 
-    const userData = userQuery.docs[0].data();
-    return NextResponse.json({ email: userData.email });
+    return NextResponse.json({ email: rows[0].email, userId: rows[0].id });
   } catch (err) {
     console.error('Phone lookup error:', err);
     return NextResponse.json({ error: 'Failed to look up account.' }, { status: 500 });

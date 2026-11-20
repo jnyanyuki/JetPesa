@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { adminDb, FieldValue } from '../../../../lib/firebaseAdmin';
+import { sql, withTransaction } from '../../../../lib/db';
 import { checkPrintPayB2CStatus } from '../../../../lib/printpay';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   try {
@@ -28,19 +30,19 @@ export async function POST(request) {
       return NextResponse.json({ received: true, message: 'Missing conversation_id' });
     }
 
-    const snap = await adminDb
-      .collection('withdrawals')
-      .where('conversationId', '==', conversationId)
-      .limit(1)
-      .get();
+    const rows = await sql.query(`
+      SELECT id, user_id, amount, status 
+      FROM public.withdrawals 
+      WHERE conversation_id = $1 
+      LIMIT 1
+    `, [conversationId]);
 
-    if (snap.empty) {
+    if (!rows.length) {
       console.warn(`Withdrawal record not found for conversationId: ${conversationId}`);
       return NextResponse.json({ received: true, message: 'Withdrawal not found' });
     }
 
-    const docRef = snap.docs[0].ref;
-    const tx = snap.docs[0].data();
+    const tx = rows[0];
 
     // Verify status with PrintPay API directly
     let isSuccess = false;
@@ -53,29 +55,28 @@ export async function POST(request) {
     }
 
     if (isSuccess) {
-      await docRef.update({
-        status: 'completed',
-        receipt,
-        callbackBody: body,
-        updatedAt: new Date().toISOString(),
-      });
+      await sql.query(`
+        UPDATE public.withdrawals 
+        SET status = 'completed', receipt = COALESCE($1, receipt), updated_at = NOW() 
+        WHERE id = $2
+      `, [receipt, tx.id]);
       return NextResponse.json({ received: true });
     }
 
     // Payout failed on telco side - refund user if not yet refunded
-    if (!tx.refunded) {
-      const userRef = adminDb.collection('users').doc(tx.userId);
-      await adminDb.runTransaction(async (t) => {
-        t.update(userRef, {
-          walletBalance: FieldValue.increment(tx.amount),
-        });
-        t.update(docRef, {
-          status: 'failed',
-          refunded: true,
-          failureReason: body.result_desc || body.message || 'Payout failed.',
-          callbackBody: body,
-          updatedAt: new Date().toISOString(),
-        });
+    if (tx.status !== 'failed') {
+      await withTransaction(async (client) => {
+        await client.query(`
+          UPDATE public.users 
+          SET wallet_balance = wallet_balance + $1, updated_at = NOW() 
+          WHERE id = $2
+        `, [Number(tx.amount), tx.user_id]);
+
+        await client.query(`
+          UPDATE public.withdrawals 
+          SET status = 'failed', failure_reason = $1, updated_at = NOW() 
+          WHERE id = $2
+        `, [body.result_desc || body.message || 'Payout failed.', tx.id]);
       });
     }
 

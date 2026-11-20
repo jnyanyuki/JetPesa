@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { adminDb, FieldValue } from '../../../../lib/firebaseAdmin';
+import { sql, withTransaction } from '../../../../lib/db';
 import { checkPrintPayC2BStatus } from '../../../../lib/printpay';
 
 export const dynamic = 'force-dynamic';
@@ -17,50 +17,36 @@ export async function GET(request) {
       );
     }
 
-    let docRef;
-    let depositData;
-
+    let rows = [];
     if (reference) {
-      docRef = adminDb.collection('deposits').doc(reference);
-      const snap = await docRef.get();
-      if (snap.exists) {
-        depositData = snap.data();
-      }
+      rows = await sql.query(`SELECT * FROM public.deposits WHERE id = $1 LIMIT 1`, [reference]);
+    }
+    if (!rows.length && checkoutId) {
+      rows = await sql.query(`SELECT * FROM public.deposits WHERE checkout_id = $1 LIMIT 1`, [checkoutId]);
     }
 
-    if (!depositData && checkoutId) {
-      const snap = await adminDb
-        .collection('deposits')
-        .where('checkoutId', '==', checkoutId)
-        .limit(1)
-        .get();
-
-      if (!snap.empty) {
-        docRef = snap.docs[0].ref;
-        depositData = snap.docs[0].data();
-      }
-    }
-
-    if (!depositData) {
+    if (!rows.length) {
       return NextResponse.json(
         { success: false, message: 'Deposit record not found.' },
         { status: 404 }
       );
     }
 
+    const depositData = rows[0];
+
     // If already completed and credited, return immediate success
     if (depositData.status === 'completed' && depositData.credited) {
       return NextResponse.json({
         success: true,
         status: 'completed',
-        amount: depositData.amount,
-        mpesaReceipt: depositData.mpesaReceipt || null,
+        amount: Number(depositData.amount),
+        mpesaReceipt: depositData.mpesa_receipt || null,
         ...depositData,
       });
     }
 
-    const cId = depositData.checkoutId || checkoutId;
-    if (!cId) {
+    const targetCheckoutId = depositData.checkout_id || checkoutId;
+    if (!targetCheckoutId) {
       return NextResponse.json({
         success: true,
         status: depositData.status,
@@ -69,59 +55,59 @@ export async function GET(request) {
     }
 
     // Poll live status from PrintPay API
-    const liveStatus = await checkPrintPayC2BStatus(cId);
-    const normalizedStatus = String(liveStatus?.status || '').toUpperCase();
+    const liveStatus = await checkPrintPayC2BStatus(targetCheckoutId);
+    const apiStatus = String(liveStatus?.status || '').toUpperCase();
+    const receipt = liveStatus?.mpesa_receipt_number || liveStatus?.receipt || null;
 
-    if (normalizedStatus === 'SUCCESS') {
-      const receipt = liveStatus.mpesa_receipt_number || liveStatus.mpesa_receipt || null;
+    if (apiStatus === 'SUCCESS') {
+      const amt = Number(depositData.amount || liveStatus.amount || 0);
 
-      if (!depositData.credited) {
-        await adminDb.runTransaction(async (transaction) => {
-          transaction.update(docRef, {
-            status: 'completed',
-            credited: true,
-            mpesaReceipt: receipt,
-            liveStatusResponse: liveStatus,
-            updatedAt: new Date().toISOString(),
-          });
+      // Crediting user balance atomically in PostgreSQL
+      await withTransaction(async (client) => {
+        await client.query(`
+          UPDATE public.deposits 
+          SET status = 'completed', credited = TRUE, mpesa_receipt = COALESCE($1, mpesa_receipt), updated_at = NOW() 
+          WHERE id = $2 AND credited = FALSE
+        `, [receipt, depositData.id]);
 
-          transaction.update(adminDb.collection('users').doc(depositData.userId), {
-            walletBalance: FieldValue.increment(depositData.amount),
-          });
-        });
-      }
+        await client.query(`
+          UPDATE public.users 
+          SET wallet_balance = wallet_balance + $1, updated_at = NOW() 
+          WHERE id = $2
+        `, [amt, depositData.user_id]);
+      });
 
       return NextResponse.json({
         success: true,
         status: 'completed',
-        amount: depositData.amount,
+        amount: amt,
         mpesaReceipt: receipt,
+        liveStatus,
       });
     }
 
-    if (normalizedStatus === 'FAILED' || normalizedStatus === 'CANCELLED') {
-      await docRef.update({
-        status: 'failed',
-        failureReason: liveStatus.message || 'Payment cancelled or failed on handset.',
-        liveStatusResponse: liveStatus,
-        updatedAt: new Date().toISOString(),
-      });
+    if (apiStatus === 'FAILED' || apiStatus === 'CANCELLED') {
+      await sql.query(`
+        UPDATE public.deposits 
+        SET status = 'failed', updated_at = NOW() 
+        WHERE id = $1
+      `, [depositData.id]);
 
       return NextResponse.json({
         success: true,
         status: 'failed',
-        failureReason: liveStatus.message || 'Payment failed.',
+        failureReason: liveStatus?.message || 'Payment was cancelled or failed.',
+        liveStatus,
       });
     }
 
-    // Still pending
     return NextResponse.json({
       success: true,
       status: 'pending',
-      amount: depositData.amount,
+      liveStatus,
     });
   } catch (error) {
-    console.error('PrintPay Status Check Error:', error);
+    console.error('C2B Status Check Error:', error);
     return NextResponse.json(
       { success: false, message: error.message },
       { status: 500 }

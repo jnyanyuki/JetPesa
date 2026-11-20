@@ -2,9 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth, db } from '../../firebaseConfig';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { authClient } from '../../lib/auth/client';
 import confetti from 'canvas-confetti';
 
 const MIN_WAGER = 10;
@@ -402,6 +400,30 @@ export default function UltimateJetPesaCockpit() {
     await fetchProvablyRound(currentRoundRef.current.nonce, true);
   };
 
+  const refreshUserData = async () => {
+    try {
+      const res = await fetch('/api/user/profile');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.user) {
+          setBalance(Number(data.user.walletBalance || 0.0));
+          if (data.user.displayName) {
+            setProfileName(data.user.displayName);
+            setEditName((p) => p || data.user.displayName);
+          }
+          if (data.user.phone) {
+            setPhoneProfile(data.user.phone);
+            setInputPhone((p) => p || data.user.phone);
+            setEditPhone((p) => p || data.user.phone);
+            setWithdrawPhone((p) => p || data.user.phone);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error refreshing user profile:', err);
+    }
+  };
+
   useEffect(() => {
     const savedPhone = localStorage.getItem('jetpesa_saved_phone');
     if (savedPhone) {
@@ -410,36 +432,44 @@ export default function UltimateJetPesaCockpit() {
       setEditPhone(savedPhone);
       setWithdrawPhone(savedPhone);
     }
-    let unsubSnapshot = null;
-    const unsubscribe = onAuthStateChanged(auth, async (curr) => {
-      if (!curr) {
-        if (unsubSnapshot) unsubSnapshot();
-        router.push('/');
-        return;
-      }
-      setUser(curr);
 
-      // Realtime listener: balance is exclusively updated by server transactions
-      unsubSnapshot = onSnapshot(doc(db, 'users', curr.uid), (snap) => {
-        if (snap.exists()) {
-          const d = snap.data();
-          setBalance(Number(d.walletBalance || 0.0));
-          if (d.displayName) setProfileName(d.displayName);
-          if (d.displayName && !editName) setEditName(d.displayName);
-          if (d.mpesaPhone && !savedPhone) {
-            setPhoneProfile(d.mpesaPhone);
-            setInputPhone(d.mpesaPhone);
-            setEditPhone(d.mpesaPhone);
-            setWithdrawPhone(d.mpesaPhone);
-          }
+    let isMounted = true;
+    let pollInterval = null;
+
+    const checkSessionAndSync = async () => {
+      try {
+        const { data: session } = await authClient.getSession();
+        if (!session?.user) {
+          router.push('/auth');
+          return;
         }
-      });
-    });
+
+        const currUser = {
+          ...session.user,
+          uid: session.user.id,
+        };
+        if (isMounted) setUser(currUser);
+
+        // Fetch initial profile & balance from Postgres
+        await refreshUserData();
+
+        // Keep balance synchronized with server-side transactions & deposits
+        pollInterval = setInterval(() => {
+          if (isMounted) refreshUserData();
+        }, 3000);
+      } catch (err) {
+        console.error('Session check failed:', err);
+        router.push('/auth');
+      }
+    };
+
+    checkSessionAndSync();
     fetchProvablyRound(1);
     startFreshLiveBetsFeed();
+
     return () => {
-      unsubscribe();
-      if (unsubSnapshot) unsubSnapshot();
+      isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, []);
 
@@ -706,10 +736,18 @@ export default function UltimateJetPesaCockpit() {
     }
     const cleanDisplayName = (editName || '').trim().slice(0, 50);
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        displayName: cleanDisplayName,
-        mpesaPhone: cleanPhone,
+      const res = await fetch('/api/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          displayName: cleanDisplayName,
+          phone: cleanPhone,
+        }),
       });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Failed to update profile');
+      }
       setProfileName(cleanDisplayName);
       setPhoneProfile(cleanPhone);
       setInputPhone(cleanPhone);
@@ -723,28 +761,40 @@ export default function UltimateJetPesaCockpit() {
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      await authClient.signOut();
+      router.push('/auth');
+    } catch (err) {
+      console.error('Sign out error:', err);
+      router.push('/auth');
+    }
+  };
+
   const handleWithdrawExecution = async () => {
     const amt = parseInt(withdrawAmount, 10);
     const targetPhone = (withdrawPhone || phoneProfile || inputPhone || '').trim();
     if (isNaN(amt) || amt < 50) { triggerToast('Minimum withdrawal is KES 50.', 'error'); return; }
     if (amt > balance) { triggerToast('Withdrawal exceeds wallet balance.', 'error'); return; }
     if (!targetPhone) { triggerToast('Please enter an M-Pesa phone number for payout.', 'error'); return; }
-    if (!user?.uid) { triggerToast('Login session expired. Please sign in again.', 'error'); return; }
+    if (!user?.uid && !user?.id) { triggerToast('Login session expired. Please sign in again.', 'error'); return; }
 
     setLoadingWithdraw(true);
     try {
-      const token = await user.getIdToken();
       const res = await fetch('/api/printpay/b2c-withdraw', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ amount: amt, phone: targetPhone }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Withdrawal initiation failed.');
+      }
+
+      if (typeof data.newBalance === 'number') {
+        setBalance(data.newBalance);
       }
 
       setWithdrawAmount('');
@@ -787,18 +837,19 @@ export default function UltimateJetPesaCockpit() {
   const triggerPayoutSequence = async (deckName, multVal, activeState) => {
     if (!user || !activeState.hasBetCurrent) return;
     try {
-      const token = await user.getIdToken();
       const res = await fetch('/api/game/cashout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ deck: deckName, betId: activeState.currentBetId }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Auto-cashout missed.');
+      }
+      if (typeof data.newBalance === 'number') {
+        setBalance(data.newBalance);
       }
       setMyBetsHistory((p) => [{ roundId: Date.now().toString().slice(-5), stake: activeState.wager, multiplier: data.multiplier, yieldAmount: data.winAmount, status: 'WON' }, ...p]);
       playSynthesizedTone(523.25, 'sine', 0.15, 0.05);
@@ -817,18 +868,19 @@ export default function UltimateJetPesaCockpit() {
       return;
     }
     try {
-      const token = await user.getIdToken();
       const autoCash = state.isAutoCash ? parseFloat(state.cashVal) : null;
       const res = await fetch('/api/game/bet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ deck: deckName, wager: state.wager, autoCashout: autoCash }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        if (typeof data.newBalance === 'number') {
+          setBalance(data.newBalance);
+        }
         if (deckName === 'A') setDeckA((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId, hasBetNext: p.isAuto }));
         else setDeckB((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId, hasBetNext: p.isAuto }));
         triggerToast(`Deck ${deckName} auto-stake KES ${state.wager} placed!`, 'success');
@@ -872,19 +924,20 @@ export default function UltimateJetPesaCockpit() {
     }
 
     try {
-      const token = await user.getIdToken();
       const autoCash = targetState.isAutoCash ? parseFloat(targetState.cashVal) : null;
       const res = await fetch('/api/game/bet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ deck: targetDeck, wager: currentWagerAmount, autoCashout: autoCash }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Wager rejected.');
+      }
+      if (typeof data.newBalance === 'number') {
+        setBalance(data.newBalance);
       }
       if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId }));
       else setDeckB((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId }));
@@ -900,18 +953,19 @@ export default function UltimateJetPesaCockpit() {
     if (!targetState.hasBetCurrent || !user) return;
 
     try {
-      const token = await user.getIdToken();
       const res = await fetch('/api/game/cashout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ deck: targetDeck, betId: targetState.currentBetId }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || 'Cashout failed.');
+      }
+      if (typeof data.newBalance === 'number') {
+        setBalance(data.newBalance);
       }
       if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
       else setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
@@ -943,16 +997,14 @@ export default function UltimateJetPesaCockpit() {
       triggerToast('Enter a valid Kenyan phone number (e.g. 07XXXXXXXX or 01XXXXXXXX).', 'error');
       return;
     }
-    if (!user?.uid) { triggerToast('Login session expired. Please sign in again.', 'error'); return; }
+    if (!user?.uid && !user?.id) { triggerToast('Login session expired. Please sign in again.', 'error'); return; }
     
     setLoadingDeposit(true);
     try {
-      const token = await user.getIdToken();
       const res = await fetch('/api/printpay/c2b', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ amount: amt, phone: cleanPhone }),
       });
@@ -969,8 +1021,7 @@ export default function UltimateJetPesaCockpit() {
           const statusData = await statusRes.json();
           if (statusData.status === 'completed') {
             clearInterval(poll);
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            setBalance(userDoc.exists() ? Number(userDoc.data().walletBalance || 0) : balance);
+            await refreshUserData();
             setIsDepositModalOpen(false);
             setLoadingDeposit(false);
             triggerToast(`Deposit confirmed! KES ${amt} added to wallet.`, 'success');
@@ -989,10 +1040,9 @@ export default function UltimateJetPesaCockpit() {
           if (attempts >= maxAttempts) {
             clearInterval(poll);
             setLoadingDeposit(false);
-            triggerToast(e.message, 'error');
           }
         }
-      }, 4000);
+      }, 3000);
     } catch (e) {
       setLoadingDeposit(false);
       triggerToast(e.message, 'error');
@@ -1261,6 +1311,7 @@ export default function UltimateJetPesaCockpit() {
             <div className="jp-modal-field"><label className="jp-modal-label">EMAIL</label><input type="text" value={user?.email || ''} disabled className="jp-modal-input jp-disabled" /></div>
             <div className="jp-modal-field"><label className="jp-modal-label">M-PESA PHONE</label><input type="text" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="07XXXXXXXX" className="jp-modal-input" /></div>
             <button onClick={handleProfileUpdate} className="jp-modal-btn jp-btn-blue">SAVE PROFILE</button>
+            <button onClick={handleSignOut} className="jp-modal-btn" style={{ marginTop: '10px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}>SIGN OUT</button>
           </div>
         </div>
       )}

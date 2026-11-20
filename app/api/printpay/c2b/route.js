@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
-import { adminDb, verifyAuthToken } from '../../../../lib/firebaseAdmin';
+import { sql } from '../../../../lib/db';
+import { getAuthSession } from '../../../../lib/auth/server';
 import { initiatePrintPayC2B, normalizeKenyanPhone, PRINTPAY_PAYBILL, PRINTPAY_WALLET_ID } from '../../../../lib/printpay';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   try {
-    const decoded = await verifyAuthToken(request).catch(() => null);
+    const session = await getAuthSession(request);
     const body = await request.json();
     const { amount, phone, username } = body;
 
-    const userId = decoded?.uid || username;
+    const userId = session?.user?.id || username;
     if (!userId) {
       throw new Error('User authentication required.');
     }
@@ -21,28 +24,20 @@ export async function POST(request) {
     const cleanPhone = normalizeKenyanPhone(phone, 'local');
     const reference = `JP-DEP-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
 
-    // Initialize deposit record in Firestore
-    await adminDb.collection('deposits').doc(reference).set({
-      reference,
-      userId,
-      amount: amt,
-      phone: cleanPhone,
-      status: 'pending',
-      provider: 'printpay',
-      credited: false,
-      createdAt: new Date().toISOString(),
-    });
+    // Ensure user row exists in public.users
+    await sql.query(`
+      INSERT INTO public.users (id, email, display_name, phone, wallet_balance)
+      VALUES ($1, $2, $3, $4, 0.00)
+      ON CONFLICT (id) DO UPDATE SET
+        phone = COALESCE(public.users.phone, EXCLUDED.phone),
+        updated_at = NOW()
+    `, [userId, session?.user?.email || null, session?.user?.name || null, cleanPhone]);
 
-    // Auto-link M-Pesa phone if user doesn't have one saved
-    try {
-      const userRef = adminDb.collection('users').doc(userId);
-      const userSnap = await userRef.get();
-      if (userSnap.exists && !userSnap.data()?.mpesaPhone) {
-        await userRef.update({ mpesaPhone: cleanPhone });
-      }
-    } catch {
-      // Non-blocking
-    }
+    // Initialize deposit record in PostgreSQL
+    await sql.query(`
+      INSERT INTO public.deposits (id, user_id, amount, phone, status, credited, provider)
+      VALUES ($1, $2, $3, $4, 'pending', FALSE, 'printpay')
+    `, [reference, userId, amt, cleanPhone]);
 
     // Call PrintPay C2B STK Push
     const printpayRes = await initiatePrintPayC2B({
@@ -50,31 +45,26 @@ export async function POST(request) {
       amount: amt,
     });
 
-    const checkoutId = printpayRes.checkout_id;
+    const checkoutId = printpayRes.checkout_id || null;
 
-    await adminDb.collection('deposits').doc(reference).update({
-      checkoutId: checkoutId || null,
-      providerResponse: printpayRes,
-    });
+    await sql.query(`
+      UPDATE public.deposits 
+      SET checkout_id = $1, raw_callback = $2, updated_at = NOW() 
+      WHERE id = $3
+    `, [checkoutId, JSON.stringify(printpayRes), reference]);
 
     return NextResponse.json({
       success: true,
-      status: 'pending',
-      provider: 'printpay',
       reference,
       checkoutId,
       paybill: PRINTPAY_PAYBILL,
       accountNumber: PRINTPAY_WALLET_ID,
-      message: 'STK push sent. Please enter your M-Pesa PIN on your phone.',
+      message: printpayRes.message || 'M-Pesa payment prompt sent to your phone.',
     });
   } catch (error) {
-    console.error('PrintPay C2B Error:', error);
+    console.error('C2B Handler Error:', error);
     return NextResponse.json(
-      {
-        success: false,
-        status: 'failed',
-        message: error.message || 'Failed to initiate STK push.',
-      },
+      { success: false, message: error.message || 'Deposit initiation failed.' },
       { status: 400 }
     );
   }

@@ -2,12 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { auth, db } from '../../firebaseConfig';
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-} from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { authClient } from '../../lib/auth/client';
 
 /* -------------------------------------------------------------------------- */
 /*  Icon System — Scalable inline SVGs                                         */
@@ -97,7 +92,7 @@ function AuthForm() {
 
   const formatAuthPassword = (pwd) => {
     if (!pwd) return '';
-    // Transparently ensure Firebase Auth 6-character requirement for soft 4-5 char PINs / passwords
+    // Transparently ensure Better Auth / system minimum length requirement for soft 4-5 char PINs / passwords
     return pwd.length < 6 ? `jp_${pwd}_jet` : pwd;
   };
 
@@ -135,7 +130,15 @@ function AuthForm() {
           finalEmail = await resolveEmailFromPhone(finalEmail);
         }
 
-        await signInWithEmailAndPassword(auth, finalEmail, formatAuthPassword(password));
+        const { data, error } = await authClient.signIn.email({
+          email: finalEmail,
+          password: formatAuthPassword(password),
+        });
+
+        if (error) {
+          throw new Error(error.message || 'Invalid email or password.');
+        }
+
         router.replace('/dashboard');
         return;
       }
@@ -163,16 +166,22 @@ function AuthForm() {
         }
 
         const phoneAuthEmail = `${cleanMpesaPhone}@phone.jetpesa.com`;
-        const cred = await createUserWithEmailAndPassword(auth, phoneAuthEmail, formatAuthPassword(password));
-        const uid = cred.user.uid;
-
-        await setDoc(doc(db, 'users', uid), {
-          uid,
-          mpesaPhone: cleanMpesaPhone,
+        const { data, error } = await authClient.signUp.email({
           email: phoneAuthEmail,
-          walletBalance: 0.0,
-          createdAt: new Date().toISOString(),
+          password: formatAuthPassword(password),
+          name: cleanMpesaPhone,
         });
+
+        if (error) {
+          throw new Error(error.message || 'Registration failed.');
+        }
+
+        // Update public.users profile with phone number
+        await fetch('/api/user/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: cleanMpesaPhone, displayName: cleanMpesaPhone }),
+        }).catch(() => {});
 
         router.replace('/dashboard');
         return;
@@ -185,16 +194,15 @@ function AuthForm() {
           throw new Error('Please enter a valid email address.');
         }
 
-        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, formatAuthPassword(password));
-        const uid = cred.user.uid;
-
-        await setDoc(doc(db, 'users', uid), {
-          uid,
+        const { data, error } = await authClient.signUp.email({
           email: cleanEmail,
-          mpesaPhone: '',
-          walletBalance: 0.0,
-          createdAt: new Date().toISOString(),
+          password: formatAuthPassword(password),
+          name: cleanEmail.split('@')[0],
         });
+
+        if (error) {
+          throw new Error(error.message || 'Registration failed.');
+        }
 
         router.replace('/dashboard');
         return;
@@ -202,14 +210,12 @@ function AuthForm() {
     } catch (err) {
       console.error('Auth execution error:', err);
       let msg = err.message || 'Authentication failed.';
-      if (msg.includes('auth/email-already-in-use')) {
+      if (msg.includes('already exists') || msg.includes('already in use')) {
         msg = 'An account with this credential already exists. Please sign in instead.';
-      } else if (msg.includes('auth/wrong-password') || msg.includes('auth/invalid-credential')) {
+      } else if (msg.includes('Invalid') || msg.includes('password')) {
         msg = 'Invalid credentials. Please double check and try again.';
-      } else if (msg.includes('auth/user-not-found')) {
-        msg = 'No account found with these details.';
       } else {
-        msg = msg.replace('Firebase:', '').trim();
+        msg = msg.trim();
       }
       setErrorMsg(msg);
       setLoading(false);

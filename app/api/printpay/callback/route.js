@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { adminDb, FieldValue } from '../../../../lib/firebaseAdmin';
+import { sql, withTransaction } from '../../../../lib/db';
 import { checkPrintPayC2BStatus, normalizeKenyanPhone } from '../../../../lib/printpay';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
   try {
@@ -30,14 +32,13 @@ export async function POST(request) {
 
     // Idempotency check: if this M-Pesa receipt has already been credited, do not credit again
     if (receipt) {
-      const existingReceipt = await adminDb
-        .collection('deposits')
-        .where('mpesaReceipt', '==', receipt)
-        .where('credited', '==', true)
-        .limit(1)
-        .get();
+      const existingReceipt = await sql.query(`
+        SELECT id FROM public.deposits 
+        WHERE mpesa_receipt = $1 AND credited = TRUE 
+        LIMIT 1
+      `, [receipt]);
 
-      if (!existingReceipt.empty) {
+      if (existingReceipt.length > 0) {
         console.log(`Receipt ${receipt} already credited. Skipping.`);
         return NextResponse.json({ received: true, message: 'Already processed' });
       }
@@ -45,15 +46,15 @@ export async function POST(request) {
 
     // SCENARIO 1: Online STK Push (Identified via checkoutId)
     if (checkoutId) {
-      const snap = await adminDb
-        .collection('deposits')
-        .where('checkoutId', '==', checkoutId)
-        .limit(1)
-        .get();
+      const rows = await sql.query(`
+        SELECT id, user_id, amount, credited 
+        FROM public.deposits 
+        WHERE checkout_id = $1 
+        LIMIT 1
+      `, [checkoutId]);
 
-      if (!snap.empty) {
-        const docRef = snap.docs[0].ref;
-        const tx = snap.docs[0].data();
+      if (rows.length > 0) {
+        const tx = rows[0];
 
         // Security Double-Check: Query PrintPay API directly to confirm status
         let isVerifiedSuccess = false;
@@ -68,28 +69,28 @@ export async function POST(request) {
         }
 
         if (!isVerifiedSuccess) {
-          await docRef.update({
-            status: 'failed',
-            failureReason: body.message || `Payment failed with code ${resultCode}`,
-            callbackBody: body,
-            updatedAt: new Date().toISOString(),
-          });
+          await sql.query(`
+            UPDATE public.deposits 
+            SET status = 'failed', raw_callback = $1, updated_at = NOW() 
+            WHERE id = $2
+          `, [JSON.stringify(body), tx.id]);
           return NextResponse.json({ received: true, note: 'Marked failed' });
         }
 
         if (!tx.credited) {
-          await adminDb.runTransaction(async (transaction) => {
-            transaction.update(docRef, {
-              status: 'completed',
-              credited: true,
-              mpesaReceipt: receipt,
-              callbackBody: body,
-              updatedAt: new Date().toISOString(),
-            });
+          const depositAmt = Number(tx.amount || amt);
+          await withTransaction(async (client) => {
+            await client.query(`
+              UPDATE public.deposits 
+              SET status = 'completed', credited = TRUE, mpesa_receipt = COALESCE($1, mpesa_receipt), raw_callback = $2, updated_at = NOW() 
+              WHERE id = $3 AND credited = FALSE
+            `, [receipt, JSON.stringify(body), tx.id]);
 
-            transaction.update(adminDb.collection('users').doc(tx.userId), {
-              walletBalance: FieldValue.increment(tx.amount || amt),
-            });
+            await client.query(`
+              UPDATE public.users 
+              SET wallet_balance = wallet_balance + $1, updated_at = NOW() 
+              WHERE id = $2
+            `, [depositAmt, tx.user_id]);
           });
         }
 
@@ -108,65 +109,49 @@ export async function POST(request) {
         localPhone = String(rawPhone).trim();
       }
 
-      // Query user in Firestore by phone
-      let userQuery = await adminDb
-        .collection('users')
-        .where('mpesaPhone', '==', localPhone)
-        .limit(1)
-        .get();
+      // Query user in PostgreSQL by phone
+      const users = await sql.query(`
+        SELECT id FROM public.users 
+        WHERE phone = $1 OR phone = $2 
+        LIMIT 1
+      `, [localPhone, intlPhone]);
 
-      if (userQuery.empty && intlPhone) {
-        userQuery = await adminDb
-          .collection('users')
-          .where('mpesaPhone', '==', intlPhone)
-          .limit(1)
-          .get();
-      }
+      if (users.length > 0) {
+        const matchedUserId = users[0].id;
+        const newDepId = `JP-OFF-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
 
-      if (!userQuery.empty) {
-        const userDoc = userQuery.docs[0];
-        const userId = userDoc.id;
-        const reference = `JP-OFFLINE-${receipt || Date.now()}`;
+        await withTransaction(async (client) => {
+          await client.query(`
+            INSERT INTO public.deposits (id, user_id, amount, phone, mpesa_receipt, status, credited, provider, raw_callback)
+            VALUES ($1, $2, $3, $4, $5, 'completed', TRUE, 'printpay_offline', $6)
+          `, [newDepId, matchedUserId, amt, localPhone, receipt, JSON.stringify(body)]);
 
-        await adminDb.runTransaction(async (transaction) => {
-          transaction.set(adminDb.collection('deposits').doc(reference), {
-            reference,
-            userId,
-            amount: amt,
-            phone: localPhone,
-            mpesaReceipt: receipt,
-            status: 'completed',
-            credited: true,
-            provider: 'printpay_paybill',
-            callbackBody: body,
-            createdAt: new Date().toISOString(),
-          });
-
-          transaction.update(userDoc.ref, {
-            walletBalance: FieldValue.increment(amt),
-          });
+          await client.query(`
+            UPDATE public.users 
+            SET wallet_balance = wallet_balance + $1, updated_at = NOW() 
+            WHERE id = $2
+          `, [amt, matchedUserId]);
         });
 
-        console.log(`Successfully credited KES ${amt} to user ${userId} via offline Paybill.`);
-        return NextResponse.json({ received: true, mode: 'offline_paybill_matched', userId });
+        console.log(`Offline Paybill deposit credited: KES ${amt} to user ${matchedUserId}`);
+        return NextResponse.json({ received: true, mode: 'offline_matched', user: matchedUserId });
       } else {
-        console.warn(`Unclaimed offline payment from ${rawPhone} for KES ${amt}. No matching user.`);
-        const unclaimedRef = `UNCLAIMED-${receipt || Date.now()}`;
-        await adminDb.collection('unclaimed_deposits').doc(unclaimedRef).set({
-          phone: rawPhone,
-          amount: amt,
-          mpesaReceipt: receipt,
-          callbackBody: body,
-          createdAt: new Date().toISOString(),
-        });
+        // Unmatched phone: save to unclaimed_deposits
+        const unclaimedId = `UNCLAIMED-${receipt || Date.now()}`;
+        await sql.query(`
+          INSERT INTO public.unclaimed_deposits (id, mpesa_receipt, phone, amount, raw_callback)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (id) DO NOTHING
+        `, [unclaimedId, receipt, localPhone || String(rawPhone), amt, JSON.stringify(body)]);
 
-        return NextResponse.json({ received: true, mode: 'unclaimed_saved' });
+        console.warn(`Unclaimed deposit recorded for phone ${rawPhone}, amount ${amt}`);
+        return NextResponse.json({ received: true, mode: 'unclaimed' });
       }
     }
 
-    return NextResponse.json({ received: true, message: 'Unmatched payload' });
+    return NextResponse.json({ received: true, message: 'No action taken' });
   } catch (error) {
-    console.error('PrintPay Webhook Error:', error);
-    return NextResponse.json({ received: true, error: error.message }, { status: 500 });
+    console.error('PrintPay Callback Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

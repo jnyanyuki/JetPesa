@@ -1,32 +1,28 @@
 # JetPesa ✈️
 
-JetPesa is a modern Aviator-style betting platform built using Next.js, Firebase, and PrintPay M-Pesa Integration (C2B & B2C).
+JetPesa is a modern Aviator-style betting platform built using Next.js 14, Neon PostgreSQL, Neon Managed Better Auth, and PrintPay M-Pesa Integration (C2B & B2C).
 
 The platform features:
 
-- Real-time Aviator gameplay
-- Auto Bet & Auto Cashout
-- M-Pesa deposits & payouts via PrintPay
-- Firebase Authentication
-- Firestore wallet management
-- Live multiplayer lobby chat
+- Real-time Aviator gameplay & provably fair verification
+- Auto Bet & Auto Cashout with dual betting decks
+- M-Pesa deposits & instant automated payouts via PrintPay
+- Neon Managed Better Auth (email and phone number sign-in with soft 4+ char PINs / passwords)
+- Serverless PostgreSQL ACID wallet transactions with zero client tampering
+- Live multiplayer lobby chat & live wager feed
 - Mobile responsive cockpit UI
-- Rain effects, sounds, animations, and flight simulation
-- Provably fair styled gameplay system
+- Rain effects, synthesizer sound system, animations, and flight simulation
 
 ---
 
 # Tech Stack
 
-- Next.js 14
-- React
-- Firebase Authentication
-- Firebase Firestore
-- Firebase Admin SDK
-- PrintPay API (C2B & B2C)
-- Vercel Deployment
-- Canvas API
-- canvas-confetti
+- **Framework**: Next.js 14 (App Router)
+- **Database**: Neon Serverless PostgreSQL (`@neondatabase/serverless`)
+- **Authentication**: Neon Managed Better Auth (`@neon/auth` / `better-auth`)
+- **Payment Processing**: PrintPay API (C2B STK push, offline Paybill matching, and B2C automated withdrawals)
+- **Deployment**: Vercel
+- **Animations & Effects**: HTML5 Canvas, canvas-confetti, Web Audio API
 
 ---
 
@@ -42,7 +38,7 @@ cd jetpesa
 Install dependencies:
 
 ```bash
-npm install
+npm install --legacy-peer-deps
 ```
 
 Run locally:
@@ -55,69 +51,48 @@ npm run dev
 
 # Environment Variables
 
-Create a `.env.local` file:
+Configure `.env.local`:
 
 ```env
-NEXT_PUBLIC_FIREBASE_API_KEY=
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-NEXT_PUBLIC_FIREBASE_APP_ID=
+# Database (Neon Serverless PostgreSQL)
+DATABASE_URL="postgresql://neondb_owner:PASSWORD@ep-fancy-bread-bhqw5fab.c-10.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+DATABASE_URL_POOLED="postgresql://neondb_owner:PASSWORD@ep-fancy-bread-bhqw5fab-pooler.c-10.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 
-FIREBASE_PROJECT_ID=
-FIREBASE_CLIENT_EMAIL=
-FIREBASE_PRIVATE_KEY=
+# Neon Managed Better Auth
+NEON_AUTH_BASE_URL="https://ep-fancy-bread-bhqw5fab.neonauth.c-10.eu-central-1.aws.neon.tech/neondb/auth"
+BETTER_AUTH_URL="http://localhost:3000"
 
+# PrintPay M-Pesa Gateway
 PRINTPAY_WALLET_ID=RK06FTNUZX5T
 PRINTPAY_PAYBILL=1416998
-PRINTPAY_API_KEY=
-PRINTPAY_SECURITY_CREDENTIAL=
-PRINTPAY_WEBHOOK_SECRET=
+PRINTPAY_API_KEY=your_printpay_api_key
+PRINTPAY_SECURITY_CREDENTIAL=your_security_credential
+PRINTPAY_WEBHOOK_SECRET=your_webhook_secret
 
-GAME_SERVER_SEED=
+# Game Seeds (Provably Fair)
+GAME_SERVER_SEED=your_game_server_seed
 GAME_CLIENT_SEED=jetpesa_client_seed_prod_anchor
 ```
 
 ---
 
-# Firebase Setup
+# Neon Setup
 
-## 1. Enable Authentication
-
-Enable:
-- Email/Password
-- Phone Authentication (optional/lookup)
-
-Inside Firebase Console.
-
----
-
-## 2. Deploy Firestore Rules
-
-Deploy the comprehensive security rules in [firestore.rules](file:///c:/FullStack/JetPesa/firestore.rules):
-
-```bash
-firebase deploy --only firestore:rules
-```
-
-These rules protect user wallets from client tampering, restrict deposits and withdrawals to server-side mutations, and enforce read-only game bets.
-
----
-
-## 3. Firebase Admin SDK
-
-Generate a service account:
-
-Firebase Console → Project Settings → Service Accounts → Generate Private Key
-
-Use the values in:
-
-```env
-FIREBASE_PROJECT_ID
-FIREBASE_CLIENT_EMAIL
-FIREBASE_PRIVATE_KEY
-```
+1. **Initialize Neon project**:
+   ```bash
+   neon init -y --org-id <org-id> --project-id <project-id> --branch production --services "postgres,auth"
+   ```
+2. **Deploy & pull env vars**:
+   ```bash
+   neon deploy
+   ```
+3. **Database Schema**:
+   The relational schema runs in PostgreSQL with strict check constraints:
+   - `public.users`: Accounts, M-Pesa numbers, and `wallet_balance NUMERIC(14,2) CHECK (wallet_balance >= 0.00)`
+   - `public.deposits`: C2B STK requests, receipt hashes, and idempotency status
+   - `public.withdrawals`: B2C automated payouts, conversation IDs, and disbursement status
+   - `public.bets`: Multiplier stakes, rounds, and yields
+   - `public.unclaimed_deposits`: Offline Paybill ledger matching
 
 ---
 
@@ -130,79 +105,25 @@ JetPesa integrates **PrintPay** for both M-Pesa collections (C2B) and automated 
    - Manual Paybill support: **Paybill 1416998**, Account **RK06FTNUZX5T**
    - Live status verification via `GET /api/printpay/c2b-status`
    - Instant webhook confirmation via `POST /api/printpay/callback`
-   - Wallet balances are credited ONLY after confirmed payment.
+   - Balances credited inside ACID PostgreSQL transactions.
 
 2. **B2C (Disbursements / Withdrawals)**:
    - Automated M-Pesa withdrawal payouts via `POST /api/printpay/b2c-withdraw`
    - Live payout status tracking via `POST /api/printpay/b2c-status`
    - Payout result webhook via `POST /api/printpay/b2c-callback`
-   - Atomic balance debit and automatic refund if payout fails at telco.
-   - Merchant float balance check via `GET /api/printpay/b2c-balance`
-
----
-
-# Deployment
-
-Recommended deployment:
-
-- Vercel
-- Koyeb
-- Replit
-- Render
-- VPS
-
----
-
-# Features
-
-## Aviator Gameplay
-
-- Real-time multiplier engine
-- Crash simulation
-- Auto flight rendering
-- Animated SVG aircraft
-- Rain mode
-- Sound system
-
-## Wallet
-
-- Deposit via M-Pesa
-- Withdrawal requests
-- Real-time balance updates
-
-## Betting
-
-- Dual betting decks
-- Auto bet
-- Auto cashout
-- Manual cashout
-
-## Social
-
-- Live chat room
-- Multiplayer activity feed
-- Live wager tape
+   - Atomic balance debit and automatic refund in PostgreSQL if payout fails at telco.
 
 ---
 
 # Production Notes
 
-Important:
-
-- Never credit wallets from frontend responses
-- Always use payment callbacks
-- Keep Firebase Admin keys private
-- Use Firestore security rules
-- Validate all payment amounts server-side
+- Never credit wallets from frontend responses.
+- All balance deductions and credits use PostgreSQL transactions with row-level locks.
+- User authentication is powered by Neon Managed Better Auth sessions.
+- All payment amounts and phone numbers are validated server-side.
 
 ---
 
 # License
 
 MIT License
-
----
-
-# Author
-
-TK.
