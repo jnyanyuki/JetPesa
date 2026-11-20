@@ -184,6 +184,8 @@ export default function UltimateJetPesaCockpit() {
   const audioCtxRef = useRef(null);
   const planeImageRef = useRef(null);
   const lastCycleRef = useRef(null);
+  const cycleCrashedRef = useRef(false);
+  const crashTimestampRef = useRef(0);
   const recordedCrashCycleRef = useRef(null);
   const betNonceRef = useRef(1);
   const lastStateCheckRef = useRef(0);
@@ -338,7 +340,9 @@ export default function UltimateJetPesaCockpit() {
 
   const calculateMultiplierAtSeconds = (activeSeconds) => {
     if (activeSeconds <= 0) return 1.0;
-    const mult = Math.exp(0.06 * activeSeconds + 0.019 * Math.pow(activeSeconds, 2));
+    // Uniform slowed progression for initial/mid range (standard industry Aviator curve),
+    // with smoothly accelerated rate for very high flight ranges (10x+):
+    const mult = Math.exp(0.045 * activeSeconds + 0.004 * Math.pow(activeSeconds, 2) + 0.00045 * Math.pow(activeSeconds, 3));
     return parseFloat(mult.toFixed(2));
   };
 
@@ -522,14 +526,15 @@ export default function UltimateJetPesaCockpit() {
   useEffect(() => {
     function runDistributedClockLoop() {
       const epochTimeMs = Date.now();
-      const cycleInterval = 21000;
+      const cycleInterval = 28000;
       const countdownInterval = 5000;
-      const simulationWindow = 14000;
+      const simulationWindow = 20000;
       const cycleIndex = Math.floor(epochTimeMs / cycleInterval);
       const offsetMs = epochTimeMs % cycleInterval;
 
       if (lastCycleRef.current !== cycleIndex) {
         lastCycleRef.current = cycleIndex;
+        cycleCrashedRef.current = false;
         queuedBetPendingRef.current = { A: false, B: false };
         startFreshLiveBetsFeed();
         fetchRoundState();
@@ -538,6 +543,7 @@ export default function UltimateJetPesaCockpit() {
       const effectiveCrash = currentRoundRef.current.crashPoint || 2.0;
 
       if (offsetMs < countdownInterval) {
+        cycleCrashedRef.current = false;
         if (gameStatus !== 'idle') {
           setGameStatus('idle');
           setMultiplier(1.0);
@@ -554,55 +560,69 @@ export default function UltimateJetPesaCockpit() {
           placeQueuedBet('B', deckB);
         }
       } else if (offsetMs < countdownInterval + simulationWindow) {
-        setGameStatus('running');
+        if (cycleCrashedRef.current) {
+          // Stay cleanly crashed
+          if (gameStatus !== 'crashed') {
+            setGameStatus('crashed');
+            setMultiplier(effectiveCrash);
+          }
+        } else {
+          // Periodically sync live round state from server to catch crash points dynamically
+          if (epochTimeMs - lastStateCheckRef.current > 1200) {
+            lastStateCheckRef.current = epochTimeMs;
+            fetch('/api/game/round-state', { cache: 'no-store' })
+              .then((r) => r.json())
+              .then((st) => {
+                if (st?.success && st?.crashPoint) {
+                  currentRoundRef.current.crashPoint = Number(st.crashPoint);
+                }
+              })
+              .catch(() => {});
+          }
 
-        // Periodically sync live round state from server to catch crash points dynamically
-        if (epochTimeMs - lastStateCheckRef.current > 1200) {
-          lastStateCheckRef.current = epochTimeMs;
-          fetch('/api/game/round-state', { cache: 'no-store' })
-            .then((r) => r.json())
-            .then((st) => {
-              if (st?.success && st?.crashPoint) {
-                currentRoundRef.current.crashPoint = Number(st.crashPoint);
+          const activeSeconds = (offsetMs - countdownInterval) / 1000;
+          const computedMultiplier = calculateMultiplierAtSeconds(activeSeconds);
+
+          if (computedMultiplier >= effectiveCrash) {
+            cycleCrashedRef.current = true;
+            crashTimestampRef.current = epochTimeMs;
+            setGameStatus('crashed');
+            setMultiplier(effectiveCrash);
+            markLiveBetsCrashed();
+            persistCrashToHistory(effectiveCrash, cycleIndex);
+            setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+            setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          } else {
+            if (gameStatus !== 'running') setGameStatus('running');
+            setMultiplier(computedMultiplier);
+            updateLiveBetStatuses(computedMultiplier);
+            if (offsetMs % 300 < 20) playSynthesizedTone(200 + computedMultiplier * 15, 'sine', 0.015, 0.012);
+            setDeckA((p) => {
+              if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
+                triggerPayoutSequence('A', computedMultiplier, p);
+                return { ...p, hasBetCurrent: false, currentBetId: null };
               }
-            })
-            .catch(() => {});
+              return p;
+            });
+            setDeckB((p) => {
+              if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
+                triggerPayoutSequence('B', computedMultiplier, p);
+                return { ...p, hasBetCurrent: false, currentBetId: null };
+              }
+              return p;
+            });
+          }
         }
-        const activeSeconds = (offsetMs - countdownInterval) / 1000;
-        const computedMultiplier = calculateMultiplierAtSeconds(activeSeconds);
-        if (computedMultiplier >= effectiveCrash) {
+      } else {
+        cycleCrashedRef.current = true;
+        if (gameStatus !== 'crashed') {
           setGameStatus('crashed');
           setMultiplier(effectiveCrash);
           markLiveBetsCrashed();
           persistCrashToHistory(effectiveCrash, cycleIndex);
           setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
           setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
-        } else {
-          setMultiplier(computedMultiplier);
-          updateLiveBetStatuses(computedMultiplier);
-          if (offsetMs % 300 < 20) playSynthesizedTone(200 + computedMultiplier * 15, 'sine', 0.015, 0.012);
-          setDeckA((p) => {
-            if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
-              triggerPayoutSequence('A', computedMultiplier, p);
-              return { ...p, hasBetCurrent: false, currentBetId: null };
-            }
-            return p;
-          });
-          setDeckB((p) => {
-            if (p.hasBetCurrent && p.isAutoCash && computedMultiplier >= parseFloat(p.cashVal)) {
-              triggerPayoutSequence('B', computedMultiplier, p);
-              return { ...p, hasBetCurrent: false, currentBetId: null };
-            }
-            return p;
-          });
         }
-      } else {
-        setGameStatus('crashed');
-        setMultiplier(effectiveCrash);
-        markLiveBetsCrashed();
-        persistCrashToHistory(effectiveCrash, cycleIndex);
-        setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
-        setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
       }
 
       renderRadarCanvas(offsetMs, countdownInterval);
@@ -668,83 +688,108 @@ export default function UltimateJetPesaCockpit() {
       ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(W, j); ctx.stroke();
     }
 
-    if (offsetMs >= countdownLimit && gameStatus === 'running') {
+    if (offsetMs >= countdownLimit) {
       const secondsInAir = (offsetMs - countdownLimit) / 1000;
       drawRain(ctx, W, H, secondsInAir);
 
-      const flightProgress = Math.min(secondsInAir / 11, 1);
-      const smoothProgress = 1 - Math.pow(1 - flightProgress, 2.4);
-      const multiplierLift = Math.min((multiplier - 1) / 2.8, 1);
-      const liftFactor = Math.max(smoothProgress * 0.9, multiplierLift);
+      const isCrashed = gameStatus === 'crashed' || cycleCrashedRef.current;
+      const timeSinceCrash = isCrashed && crashTimestampRef.current ? (Date.now() - crashTimestampRef.current) / 1000 : 0;
+
+      // Pacing: Uniform slowed takeoff that gently glides into the sweet spot cruising zone (72% width, 65% height)
+      const flightProgress = Math.min(secondsInAir / 14, 1);
+      const easeX = 1 - Math.pow(1 - flightProgress, 1.8);
+      const easeY = 1 - Math.pow(1 - flightProgress, 2.2);
 
       const pad = Math.max(30, W * 0.06);
       const startX = pad;
       const baseY = H - pad;
-      const maxLift = H - pad * 2.5;
+      const targetW = (W - pad * 2) * 0.72;
+      const targetH = (H - pad * 2.2) * 0.65;
 
-      const cx = startX + (W - pad * 2.5) * Math.min(Math.pow(flightProgress, 0.82), 1);
-      const cy = baseY - maxLift * Math.min(liftFactor, 1);
+      // Gentle aerodynamic hovering oscillation
+      const hoverWave = Math.sin(secondsInAir * 2.5) * (H < 350 ? 3 : 5);
 
-      const controlX = startX + (cx - startX) * 0.48;
-      const controlY = baseY - maxLift * Math.min(liftFactor * 0.42, 0.62);
+      let cx = startX + targetW * easeX;
+      let cy = baseY - targetH * easeY + hoverWave;
 
-      ctx.beginPath();
-      ctx.moveTo(startX, baseY);
-      ctx.quadraticCurveTo(controlX, controlY, cx, cy);
-      ctx.strokeStyle = 'rgba(225,29,72,0.98)';
-      ctx.lineWidth = W < 500 ? 4 : 6;
-      ctx.shadowBlur = 28;
-      ctx.shadowColor = '#e11d48';
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+      // When crashed, the plane swoops forward and upward off-screen into the clouds!
+      if (isCrashed) {
+        const exitProgress = Math.min(timeSinceCrash / 1.0, 1);
+        const exitSwoop = Math.pow(exitProgress, 2);
+        cx += exitSwoop * (W * 0.65);
+        cy -= exitSwoop * (H * 0.75);
+      }
 
-      ctx.lineTo(cx, baseY);
-      ctx.lineTo(startX, baseY);
-      ctx.closePath();
+      // Draw the red curved flight trajectory trail (remains visible while plane is on screen)
+      if (!isCrashed || timeSinceCrash < 0.9) {
+        const controlX = startX + (cx - startX) * 0.45;
+        const controlY = baseY - (baseY - cy) * 0.28;
 
-      const underGradient = ctx.createLinearGradient(startX, cy, startX, baseY);
-      underGradient.addColorStop(0, 'rgba(225,29,72,0.26)');
-      underGradient.addColorStop(0.45, 'rgba(225,29,72,0.1)');
-      underGradient.addColorStop(1, 'transparent');
-      ctx.fillStyle = underGradient;
-      ctx.fill();
-
-      // Plane scales with canvas width
-      const planeScale = Math.max(0.45, Math.min(W / 700, 1));
-      const planeW = 136 * planeScale;
-      const planeH = 64 * planeScale;
-      const planeAngle = -0.32 + Math.min(liftFactor * 0.38, 0.26) + Math.sin(secondsInAir * 5) * 0.018;
-
-      // Shadow
-      ctx.save();
-      ctx.translate(cx + 8 * planeScale, cy + 13 * planeScale);
-      ctx.rotate(planeAngle);
-      ctx.globalAlpha = 0.2;
-      ctx.filter = `blur(${Math.round(11 * planeScale)}px)`;
-      if (planeImageRef.current) ctx.drawImage(planeImageRef.current, -planeW / 2, -planeH / 2, planeW, planeH);
-      ctx.restore();
-
-      // Main plane
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(planeAngle);
-      ctx.shadowBlur = 24 * planeScale;
-      ctx.shadowColor = 'rgba(255,255,255,0.32)';
-      if (planeImageRef.current) ctx.drawImage(planeImageRef.current, -planeW / 2, -planeH / 2, planeW, planeH);
-      ctx.restore();
-
-      // Exhaust particles
-      const particleCount = W < 400 ? 3 : 5;
-      for (let i = 0; i < particleCount; i++) {
         ctx.beginPath();
-        ctx.arc(
-          cx - (36 + i * 11) * planeScale,
-          cy + Math.sin(secondsInAir * 9 + i) * 4 * planeScale,
-          (2.2 + i * 0.35) * planeScale,
-          0, Math.PI * 2
-        );
-        ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.48)' : 'rgba(239,68,68,0.42)';
+        ctx.moveTo(startX, baseY);
+        ctx.quadraticCurveTo(controlX, controlY, cx, cy);
+        ctx.strokeStyle = 'rgba(225,29,72,0.98)';
+        ctx.lineWidth = W < 500 ? 4 : 6;
+        ctx.shadowBlur = multiplier >= 10.0 ? 36 : 24;
+        ctx.shadowColor = '#e11d48';
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        ctx.lineTo(cx, baseY);
+        ctx.lineTo(startX, baseY);
+        ctx.closePath();
+
+        const underGradient = ctx.createLinearGradient(startX, cy, startX, baseY);
+        underGradient.addColorStop(0, multiplier >= 10.0 ? 'rgba(225,29,72,0.32)' : 'rgba(225,29,72,0.22)');
+        underGradient.addColorStop(0.5, 'rgba(225,29,72,0.08)');
+        underGradient.addColorStop(1, 'transparent');
+        ctx.fillStyle = underGradient;
         ctx.fill();
+      }
+
+      // Render Airplane if inside viewport
+      if (cx < W + 100 && cy > -100) {
+        const planeScale = Math.max(0.45, Math.min(W / 700, 1));
+        const planeW = 136 * planeScale;
+        const planeH = 64 * planeScale;
+
+        // Angle tilts upward with lift, and elevates higher for high multiplier ranges (> 10x)
+        const highRangeTilt = multiplier >= 10.0 ? 0.08 : 0;
+        const planeAngle = -0.32 + Math.min(easeY * 0.35, 0.24) + Math.sin(secondsInAir * 5) * 0.015 - highRangeTilt;
+
+        // Shadow
+        ctx.save();
+        ctx.translate(cx + 8 * planeScale, cy + 13 * planeScale);
+        ctx.rotate(planeAngle);
+        ctx.globalAlpha = 0.2;
+        ctx.filter = `blur(${Math.round(11 * planeScale)}px)`;
+        if (planeImageRef.current) ctx.drawImage(planeImageRef.current, -planeW / 2, -planeH / 2, planeW, planeH);
+        ctx.restore();
+
+        // Main plane
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(planeAngle);
+        ctx.shadowBlur = (multiplier >= 10.0 ? 32 : 20) * planeScale;
+        ctx.shadowColor = multiplier >= 10.0 ? '#fbbf24' : 'rgba(255,255,255,0.32)';
+        if (planeImageRef.current) ctx.drawImage(planeImageRef.current, -planeW / 2, -planeH / 2, planeW, planeH);
+        ctx.restore();
+
+        // Engine flame / Exhaust particles (grows in count and vibrancy at high multipliers)
+        const particleCount = multiplier >= 10.0 ? 7 : (W < 400 ? 3 : 5);
+        for (let i = 0; i < particleCount; i++) {
+          ctx.beginPath();
+          ctx.arc(
+            cx - (36 + i * 11) * planeScale,
+            cy + Math.sin(secondsInAir * 9 + i) * 4 * planeScale,
+            (2.2 + i * 0.35) * planeScale,
+            0, Math.PI * 2
+          );
+          ctx.fillStyle = multiplier >= 10.0
+            ? (i % 2 === 0 ? 'rgba(251,191,36,0.7)' : 'rgba(239,68,68,0.6)')
+            : (i % 2 === 0 ? 'rgba(255,255,255,0.48)' : 'rgba(239,68,68,0.42)');
+          ctx.fill();
+        }
       }
     }
   };

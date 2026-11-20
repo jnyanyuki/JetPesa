@@ -366,7 +366,7 @@ export default function JetPesaLandingPage() {
         drawDemoRadar(elapsed, 'loading', 1.0);
       } else if (elapsed < 25500) {
         const flightSeconds = (elapsed - 3500) / 1000;
-        const currentMult = parseFloat(Math.exp(0.218 * flightSeconds).toFixed(2));
+        const currentMult = parseFloat(Math.exp(0.045 * flightSeconds + 0.004 * Math.pow(flightSeconds, 2) + 0.00045 * Math.pow(flightSeconds, 3)).toFixed(2));
 
         if (currentMult >= crashAt) {
           lastPhase.current = 'crashed';
