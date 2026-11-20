@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { authClient } from '../../lib/auth/client';
 import confetti from 'canvas-confetti';
 import { generateDynamicLobbyChat } from '../../lib/chatEngine';
+import { getRandomPlayerPersona, getPersonaBySeed } from '../../lib/playerSeeds';
 
 const MIN_WAGER = 10;
 const HISTORY_STORAGE_KEY = 'jetpesa_real_previous_rounds';
@@ -74,12 +75,12 @@ function Icon({ name, size = 18, className = '', style = {} }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  User Avatar                                                               */
+/*  User Avatar with Thematic Category Glyph & Accent                         */
 /* -------------------------------------------------------------------------- */
 function UserAvatar({ seed, size = 28 }) {
-  const colors = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
-  const colorIndex = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
-  const bgColor = colors[colorIndex];
+  const persona = getPersonaBySeed(seed);
+  const bgColor = persona?.color || '#3b82f6';
+  const Glyph = persona?.icon;
 
   return (
     <div
@@ -88,15 +89,16 @@ function UserAvatar({ seed, size = 28 }) {
         height: size,
         borderRadius: '50%',
         background: `${bgColor}20`,
-        border: `1px solid ${bgColor}40`,
+        border: `1.5px solid ${bgColor}60`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         color: bgColor,
         flexShrink: 0,
       }}
+      title={persona?.label || 'Pilot'}
     >
-      <Icon name="user" size={Math.round(size * 0.55)} />
+      {Glyph ? Glyph(Math.round(size * 0.58)) : <Icon name="user" size={Math.round(size * 0.52)} />}
     </div>
   );
 }
@@ -234,10 +236,10 @@ export default function UltimateJetPesaCockpit() {
   }, [liveBetsFeed]);
   const [chatInput, setChatInput] = useState('');
   const [chatLogs, setChatLogs] = useState([
-    { user: 'Shark071***45', seed: 'shark', msg: 'Admin, background rain drop claim active?', time: '08:02' },
-    { user: 'Lion072***89', seed: 'lion', msg: 'Leo tunakula rocket safi sana hapa JetPesa!', time: '08:04' },
-    { user: 'Falcon079***12', seed: 'falcon', msg: 'Ningwenda gukiria 10x rugii rufifi rwa Deck B gaka!', time: '08:04' },
-    { user: 'Cheetah011***90', seed: 'cheetah', msg: 'Asego mar plane ni e ma duong! Multiplier obiro thuth!', time: '08:05' },
+    { user: 'Turbo071***45', seed: 'turbo', msg: 'Admin, background rain drop claim active? 🙏', time: '17:50' },
+    { user: 'Diamond072***89', seed: 'diamond', msg: 'Leo tunakula rocket safi sana hapa JetPesa! 💎', time: '17:52' },
+    { user: 'Pilot079***12', seed: 'pilot', msg: 'Nimecash out 2.4x safi, ready for next takeoff!', time: '17:53' },
+    { user: 'Shujaa011***90', seed: 'shujaa', msg: 'Watu wangu tuko locked in! Faida imeingia M-Pesa.', time: '17:55' },
   ]);
 
   const [provablyData, setProvablyData] = useState(null);
@@ -431,10 +433,14 @@ export default function UltimateJetPesaCockpit() {
         ? Math.floor(Math.random() * 350)
         : Math.floor(Math.random() * 4400 + 350);
 
+      const persona = getRandomPlayerPersona();
+
       bets.push({
         id: `bet-${Date.now()}-${i}-${id}`,
-        seed: id,
-        username: px[Math.floor(Math.random() * px.length)] + Math.floor(Math.random() * 89 + 10),
+        seed: persona.seed,
+        category: persona.category,
+        username: persona.username,
+        color: persona.color,
         bet: stake,
         cashoutTarget: target,
         mult: target,
