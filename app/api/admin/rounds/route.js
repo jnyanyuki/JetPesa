@@ -14,6 +14,7 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const count = Math.min(50, Math.max(1, parseInt(searchParams.get('count') || '15', 10)));
     const startNonce = searchParams.get('startNonce') ? parseInt(searchParams.get('startNonce'), 10) : null;
+    const pastCount = Math.min(20, Math.max(1, parseInt(searchParams.get('pastCount') || '5', 10)));
 
     // Preload any persistent overrides from PostgreSQL
     try {
@@ -27,7 +28,7 @@ export async function GET(request) {
       console.warn('Could not load db overrides:', e.message);
     }
 
-    const data = getUpcomingRounds(count, startNonce);
+    const data = getUpcomingRounds(count, startNonce, pastCount);
 
     return NextResponse.json({
       success: true,

@@ -12,6 +12,7 @@ export default function JetPesaAdminPage() {
   const [activeTab, setActiveTab] = useState('radar'); // 'radar' | 'overview' | 'users' | 'bets' | 'ledger'
   const [overviewData, setOverviewData] = useState(null);
   const [roundsData, setRoundsData] = useState([]);
+  const [pastRoundsData, setPastRoundsData] = useState([]);
   const [currentCycleState, setCurrentCycleState] = useState(null);
   const [usersData, setUsersData] = useState([]);
   const [userSearch, setUserSearch] = useState('');
@@ -79,13 +80,14 @@ export default function JetPesaAdminPage() {
     return fetch(url, { ...options, headers });
   }, []);
 
-  // Fetch Radar (Current + Next 15 Rounds)
+  // Fetch Radar (Current + Next 15 Rounds + Last 5 Past Rounds)
   const loadRoundsRadar = useCallback(async () => {
     try {
-      const res = await adminFetch('/api/admin/rounds?count=15');
+      const res = await adminFetch('/api/admin/rounds?count=15&pastCount=5');
       const data = await res.json();
       if (data.success) {
         setRoundsData(data.rounds || []);
+        setPastRoundsData(data.pastRounds || []);
         setCurrentCycleState(data.currentState || null);
       }
     } catch (e) {
@@ -439,6 +441,49 @@ export default function JetPesaAdminPage() {
                 </div>
               </section>
             )}
+
+            {/* Last 5 Crash Points (History) */}
+            <section className="jp-admin-history-strip">
+              <div className="jp-history-strip-header">
+                <div className="jp-history-strip-title">
+                  <span className="jp-history-clock-icon">🕒</span>
+                  <h3>Past Flight Outcomes (Last 5 Crash Points)</h3>
+                </div>
+                <span className="jp-panel-note">Live cryptographic historical audit tape</span>
+              </div>
+
+              {pastRoundsData.length === 0 ? (
+                <div className="jp-history-empty">
+                  <span>Awaiting initial round completions...</span>
+                </div>
+              ) : (
+                <div className="jp-history-cards-grid">
+                  {pastRoundsData.map((pr) => (
+                    <div key={pr.cycleIndex} className={`jp-history-card border-${pr.category.toLowerCase()}`}>
+                      <div className="jp-history-card-top">
+                        <span className="jp-history-round-label">Round #{pr.cycleIndex}</span>
+                        <span className={`jp-cat-badge badge-${pr.category.toLowerCase()}`}>
+                          {pr.category}
+                        </span>
+                      </div>
+                      <div className="jp-history-card-body">
+                        <span className={`jp-history-mult-num mult-${pr.category.toLowerCase()}`}>
+                          {pr.crashPoint.toFixed(2)}x
+                        </span>
+                      </div>
+                      <div className="jp-history-card-footer">
+                        <span className="jp-history-ago">Ended ~{pr.completedAgoSeconds}s ago</span>
+                        {pr.isOverridden ? (
+                          <span className="jp-tag-override-sm">Overridden</span>
+                        ) : (
+                          <span className="jp-tag-natural-sm">Provably Fair</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
 
             {/* Upcoming 15 Rounds Schedule Table */}
             <section className="jp-admin-panel">
@@ -985,6 +1030,29 @@ export default function JetPesaAdminPage() {
         .jp-override-natural-badge small { display: block; font-size: 10px; color: #4ade80; margin-top: 2px; }
         .jp-override-trigger-btn { background: linear-gradient(135deg, #e11d48, #be123c); color: #fff; border: none; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; transition: transform .15s; }
         .jp-override-trigger-btn:hover { transform: translateY(-1px); }
+
+        /* History Strip (Last 5 Crash Points) */
+        .jp-admin-history-strip { background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 20px 24px; margin-bottom: 24px; backdrop-filter: blur(10px); }
+        .jp-history-strip-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+        .jp-history-strip-title { display: flex; align-items: center; gap: 8px; }
+        .jp-history-strip-title h3 { margin: 0; font-size: 15px; font-weight: 800; color: #fff; letter-spacing: 0.02em; }
+        .jp-history-clock-icon { font-size: 16px; }
+        .jp-history-cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+        .jp-history-card { background: rgba(4, 7, 15, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; transition: transform 0.15s, border-color 0.15s; }
+        .jp-history-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.2); }
+        .jp-history-card.border-instant { border-left: 4px solid #6b7280; }
+        .jp-history-card.border-low { border-left: 4px solid #60a5fa; }
+        .jp-history-card.border-high { border-left: 4px solid #c084fc; }
+        .jp-history-card.border-mega { border-left: 4px solid #fbbf24; }
+        .jp-history-card-top { display: flex; align-items: center; justify-content: space-between; }
+        .jp-history-round-label { font-size: 11px; font-weight: 800; color: #94a3b8; }
+        .jp-history-card-body { margin: 4px 0; }
+        .jp-history-mult-num { font-size: 26px; font-weight: 950; font-family: system-ui, sans-serif; line-height: 1; }
+        .jp-history-card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: #64748b; font-weight: 700; margin-top: 2px; }
+        .jp-history-ago { color: #64748b; font-size: 10px; }
+        .jp-tag-override-sm { background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; }
+        .jp-tag-natural-sm { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; }
+        .jp-history-empty { text-align: center; padding: 20px; color: #64748b; font-size: 12px; }
 
         /* Panels & Tables */
         .jp-admin-panel { background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: 18px; padding: 22px; backdrop-filter: blur(10px); }
