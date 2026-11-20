@@ -337,10 +337,10 @@ export default function UltimateJetPesaCockpit() {
 
   const generateFreshLiveBets = useCallback(() => {
     const px = ['070***', '071***', '072***', '079***', '011***', '074***', '010***', '075***', '076***', '078***'];
-    // Dynamically derive active round wagers proportional to the active lobby traffic
+    // Dynamically derive active round wagers from active lobby traffic (~25% to 75.0% participation rate)
     const currentLobby = lobbyOnlineCountRef.current || 3200;
-    const participationRate = 0.045 + Math.random() * 0.025; // ~4.5% to 7.0% of online room
-    const count = Math.max(30, Math.floor(currentLobby * participationRate));
+    const participationRate = 0.25 + Math.random() * 0.50; // ~25% to 75.0% round participation rate against the live room size
+    const count = Math.max(100, Math.floor(currentLobby * participationRate));
     const bets = [];
 
     for (let i = 0; i < count; i++) {
@@ -1316,7 +1316,7 @@ export default function UltimateJetPesaCockpit() {
   const renderLiveBets = () => (
     <div className="jp-panel-scroll">
       <div className="jp-live-table-head">
-        <span>Pilot ({liveBetsFeed.length})</span>
+        <span>Pilot ({liveBetsFeed.length.toLocaleString()})</span>
         <span>Stake</span>
         <span>Status</span>
       </div>
@@ -1327,36 +1327,43 @@ export default function UltimateJetPesaCockpit() {
           <span>New wagers are entering...</span>
         </div>
       ) : (
-        liveBetsFeed.map((b) => (
-          <div key={b.id} className={`jp-live-row ${b.status === 'cashed' ? 'jp-live-row-won' : ''}`}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-              <UserAvatar seed={b.seed} size={26} />
-              <div style={{ minWidth: 0 }}>
-                <span className="jp-live-user">{b.username}</span>
-                <span className="jp-live-sub">Round #{currentRoundRef.current.nonce}</span>
+        <>
+          {liveBetsFeed.slice(0, 100).map((b) => (
+            <div key={b.id} className={`jp-live-row ${b.status === 'cashed' ? 'jp-live-row-won' : ''}`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                <UserAvatar seed={b.seed} size={26} />
+                <div style={{ minWidth: 0 }}>
+                  <span className="jp-live-user">{b.username}</span>
+                  <span className="jp-live-sub">Round #{currentRoundRef.current.nonce}</span>
+                </div>
               </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <span className={`jp-live-stake ${b.status === 'cashed' ? 'jp-stake-won' : ''}`}>
-                {b.status === 'cashed' ? `${(b.payout || Math.floor(b.bet * b.mult)).toLocaleString()} KES` : `${b.bet.toLocaleString()} KES`}
-              </span>
-              {b.status === 'cashed' && (
-                <span style={{ fontSize: '9px', color: '#64748b', display: 'block', fontWeight: '700' }}>
-                  {b.bet.toLocaleString()} KES
+              <div style={{ textAlign: 'right' }}>
+                <span className={`jp-live-stake ${b.status === 'cashed' ? 'jp-stake-won' : ''}`}>
+                  {b.status === 'cashed' ? `${(b.payout || Math.floor(b.bet * b.mult)).toLocaleString()} KES` : `${b.bet.toLocaleString()} KES`}
                 </span>
+                {b.status === 'cashed' && (
+                  <span style={{ fontSize: '9px', color: '#64748b', display: 'block', fontWeight: '700' }}>
+                    {b.bet.toLocaleString()} KES
+                  </span>
+                )}
+              </div>
+              {b.status === 'cashed' ? (
+                <span className="jp-badge jp-badge-win">{b.mult.toFixed(2)}x</span>
+              ) : b.status === 'lost' ? (
+                <span className="jp-badge jp-badge-lost">Lost</span>
+              ) : b.status === 'flying' ? (
+                <span className="jp-badge jp-badge-flying">Flying</span>
+              ) : (
+                <span className="jp-badge jp-badge-queue">Queued</span>
               )}
             </div>
-            {b.status === 'cashed' ? (
-              <span className="jp-badge jp-badge-win">{b.mult.toFixed(2)}x</span>
-            ) : b.status === 'lost' ? (
-              <span className="jp-badge jp-badge-lost">Lost</span>
-            ) : b.status === 'flying' ? (
-              <span className="jp-badge jp-badge-flying">Flying</span>
-            ) : (
-              <span className="jp-badge jp-badge-queue">Queued</span>
-            )}
-          </div>
-        ))
+          ))}
+          {liveBetsFeed.length > 100 && (
+            <div style={{ textAlign: 'center', padding: '8px 4px', fontSize: '10px', color: '#64748b', fontWeight: '800' }}>
+              +{(liveBetsFeed.length - 100).toLocaleString()} more active pilots in this flight
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -1484,7 +1491,7 @@ export default function UltimateJetPesaCockpit() {
                   <span className="jp-live-summary-label">IN FLIGHT</span>
                 </div>
                 <span className="jp-live-summary-value jp-val-pilots">
-                  {displayActivePlayers}
+                  {displayActivePlayers.toLocaleString()}
                 </span>
               </div>
               <div className="jp-live-summary-divider" />
