@@ -128,16 +128,18 @@ export default function PlinkoGame({
   // Compute Pin Positions on Canvas resize or row change
   const computePinLayout = useCallback((width, height, rowCount) => {
     const pins = [];
-    const topMargin = 38;
-    const bottomMargin = 68; // Reserve bottom area for multiplier boxes
-    const availableHeight = height - topMargin - bottomMargin;
+    const w = width > 100 ? width : 520;
+    const h = height > 100 ? height : 480;
+    const topMargin = 32;
+    const bottomMargin = 58; // Reserve bottom area for multiplier boxes
+    const availableHeight = h - topMargin - bottomMargin;
     const rowSpacing = availableHeight / rowCount;
 
     for (let r = 0; r < rowCount; r++) {
       const pinCount = r + 3;
-      const pinSpacing = Math.min(rowSpacing * 1.15, (width * 0.90) / (rowCount + 3));
+      const pinSpacing = Math.min(rowSpacing * 1.15, (w * 0.92) / (rowCount + 3));
       const rowWidth = (pinCount - 1) * pinSpacing;
-      const startX = (width - rowWidth) / 2;
+      const startX = (w - rowWidth) / 2;
       const y = topMargin + r * rowSpacing;
 
       for (let c = 0; c < pinCount; c++) {
@@ -161,14 +163,19 @@ export default function PlinkoGame({
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    const width = rect.width || 500;
+    const width = rect.width || 520;
     const height = rect.height || 480;
     const now = performance.now();
 
     ctx.clearRect(0, 0, width, height);
 
+    let pins = pinsRef.current;
+    if (!pins || pins.length === 0) {
+      pins = computePinLayout(width, height, rows);
+      pinsRef.current = pins;
+    }
+
     // 1. Draw Pins
-    const pins = pinsRef.current;
     pins.forEach((pin, idx) => {
       const hitTime = pinHitTimesRef.current.get(idx) || 0;
       const timeSinceHit = now - hitTime;
@@ -385,6 +392,7 @@ export default function PlinkoGame({
   // Drop Disc Action
   const handleDropDisc = async () => {
     if (balance < stake) {
+      setAutoDropActive(false);
       triggerToast('Insufficient funds. Top up via M-Pesa to drop discs.', 'warning');
       onOpenDeposit();
       return;
@@ -400,6 +408,9 @@ export default function PlinkoGame({
 
       const data = await res.json();
       if (!res.ok || !data.success) {
+        if (data.code === 'INSUFFICIENT_FUNDS' || res.status === 400) {
+          setAutoDropActive(false);
+        }
         triggerToast(data.message || 'Error dropping disc.', 'error');
         setIsDropping(false);
         return;
@@ -518,32 +529,9 @@ export default function PlinkoGame({
 
       {/* ---------------- MAIN ARENA (CANVAS + SIDEBAR) ---------------- */}
       <div className="jp-plinko-arena">
-        {/* Plinko Peg Board Canvas */}
+        {/* Plinko Peg Board Canvas with interactive physics & bottom multiplier bins */}
         <div className="jp-canvas-box">
           <canvas ref={canvasRef} className="jp-plinko-canvas" />
-
-          {/* Visual Multipliers Strip at the bottom of the dropping area */}
-          <div className="jp-plinko-bins-strip">
-            {multipliers.map((mult, idx) => {
-              const binColor = getBinColor(mult, idx, multipliers.length);
-              const isHit = activeHitBin === idx;
-              return (
-                <div
-                  key={`${rows}-${risk}-${idx}`}
-                  className={`jp-plinko-bin-pill ${isHit ? 'jp-bin-pill-hit' : ''}`}
-                  style={{
-                    background: isHit ? '#ffffff' : binColor,
-                    color: isHit ? '#090d16' : '#ffffff',
-                    boxShadow: isHit
-                      ? `0 0 16px ${binColor}, 0 4px 10px rgba(0,0,0,0.5)`
-                      : `0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.35)`,
-                  }}
-                >
-                  <span className="jp-bin-pill-text">{mult >= 100 ? `${Math.round(mult)}` : `${mult}`}x</span>
-                </div>
-              );
-            })}
-          </div>
         </div>
 
         {/* Controls Sidebar */}

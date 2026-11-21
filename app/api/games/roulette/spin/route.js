@@ -147,23 +147,23 @@ export async function POST(request) {
       ]);
 
       // 5. Record bet in public.bets for platform history
-      const overallStatus = totalPayout > 0 ? (totalPayout >= totalStake ? 'won' : 'partial') : 'lost';
+      const betStatus = totalPayout > 0 ? 'WON' : 'LOST';
       const effectiveMultiplier = totalStake > 0 ? parseFloat((totalPayout / totalStake).toFixed(2)) : 0;
 
       await client.query(`
         INSERT INTO public.bets (
-          id, user_id, amount, bet_type, multiplier, payout, profit, status, game_type, created_at, resolved_at
+          id, user_id, round_id, stake, multiplier, win_amount, status, deck, game_type
         ) VALUES (
-          $1, $2, $3, 'roulette', $4, $5, $6, $7, 'roulette', NOW(), NOW()
+          $1, $2, $3, $4, $5, $6, $7, 'ROULETTE', 'roulette'
         )
       `, [
         betId,
         userId,
+        spinId,
         totalStake,
         effectiveMultiplier,
         totalPayout,
-        netProfit,
-        overallStatus,
+        betStatus,
       ]);
 
       return {

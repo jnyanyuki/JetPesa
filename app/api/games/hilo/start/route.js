@@ -129,11 +129,11 @@ export async function POST(request) {
       // 5. Insert bet record for auditing & history
       await client.query(`
         INSERT INTO public.bets (
-          id, user_id, amount, bet_type, multiplier, payout, status, game_type, created_at
+          id, user_id, round_id, stake, multiplier, win_amount, status, deck, game_type
         ) VALUES (
-          $1, $2, $3, 'hilo', 1.00, 0.00, 'pending', 'hilo', NOW()
+          $1, $2, $3, $4, 1.00, 0.00, 'ACTIVE', 'HILO', 'hilo'
         )
-      `, [betId, userId, wager]);
+      `, [betId, userId, roundId, wager]);
 
       return {
         error: false,

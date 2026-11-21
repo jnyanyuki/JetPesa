@@ -66,9 +66,9 @@ export async function POST(request) {
       // 4. Update bet record in public.bets
       await client.query(`
         UPDATE public.bets
-        SET status = 'won', payout = $1, profit = $2, multiplier = $3
-        WHERE user_id = $4 AND game_type = 'hilo' AND status = 'pending'
-      `, [payout, profit, currentMultiplier, userId]);
+        SET status = 'WON', win_amount = $1, multiplier = $2
+        WHERE round_id = $3 AND user_id = $4
+      `, [payout, currentMultiplier, round.id, userId]);
 
       return {
         error: false,

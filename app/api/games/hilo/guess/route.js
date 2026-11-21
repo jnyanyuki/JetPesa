@@ -158,9 +158,9 @@ export async function POST(request) {
         // Settle bet record as lost
         await client.query(`
           UPDATE public.bets
-          SET status = 'lost', payout = 0.00, profit = -$1, multiplier = 0.00
-          WHERE user_id = $2 AND game_type = 'hilo' AND status = 'pending'
-        `, [stake, userId]);
+          SET status = 'LOST', win_amount = 0.00, multiplier = 0.00
+          WHERE round_id = $1 AND user_id = $2
+        `, [round.id, userId]);
 
         return {
           error: false,
