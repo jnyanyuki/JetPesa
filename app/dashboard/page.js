@@ -10,6 +10,7 @@ import { SPRIBE_PLANE_DATA_URL } from '../../lib/planeAsset';
 import { getGameById, GAMES_REGISTRY } from '../../lib/games/registry';
 import GameLobbyModal from '../../components/games/GameLobbyModal';
 import GamePlaceholder from '../../components/games/GamePlaceholder';
+import MinesGame from '../../components/games/mines/MinesGame';
 
 const MIN_WAGER = 10;
 const HISTORY_STORAGE_KEY = 'jetpesa_real_previous_rounds';
@@ -713,6 +714,13 @@ export default function UltimateJetPesaCockpit() {
       setEditPhone(savedPhone);
       setWithdrawPhone(savedPhone);
     }
+
+    try {
+      const paramGame = new URLSearchParams(window.location.search).get('game');
+      if (paramGame && ['aviator', 'mines', 'plinko', 'dice', 'penalty', 'coinflip', 'hilo', 'roulette'].includes(paramGame.toLowerCase())) {
+        setActiveGameId(paramGame.toLowerCase());
+      }
+    } catch {}
 
     let isMounted = true;
     let pollInterval = null;
@@ -2066,6 +2074,14 @@ export default function UltimateJetPesaCockpit() {
                 {renderDeckPanel('B', deckB, setDeckB)}
               </div>
             </>
+          ) : activeGameId === 'mines' ? (
+            <MinesGame
+              balance={balance}
+              onBalanceChange={setBalance}
+              triggerToast={triggerToast}
+              onOpenDeposit={() => setIsDepositModalOpen(true)}
+              onOpenProvably={openProvablyModal}
+            />
           ) : (
             <GamePlaceholder
               gameId={activeGameId}
