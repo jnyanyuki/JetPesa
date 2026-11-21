@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withTransaction } from '../../../../../lib/db';
 import { getAuthSession } from '../../../../../lib/auth/server';
+import { getGameSettings } from '../../../../../lib/games/gameSettingsManager';
 import {
   HILO_CONFIG,
   dealHiloCard,
@@ -25,17 +26,28 @@ export async function POST(request) {
       return NextResponse.json({ success: false, code: 'INVALID_JSON', message: 'Malformed JSON payload.' }, { status: 400 });
     }
 
-    const wager = Math.floor(Number(body.wager || body.stake));
-    if (!wager || wager < HILO_CONFIG.minBet) {
+    const settings = await getGameSettings('hilo');
+    if (settings?.isPaused) {
       return NextResponse.json(
-        { success: false, code: 'MIN_WAGER', message: `Minimum wager is KES ${HILO_CONFIG.minBet}.` },
+        { success: false, code: 'GAME_PAUSED', message: 'Hi-Lo Card Duel is temporarily paused for scheduled maintenance.' },
+        { status: 403 }
+      );
+    }
+
+    const minBet = Number(settings?.minBet) || HILO_CONFIG.minBet;
+    const maxBet = Number(settings?.maxBet) || HILO_CONFIG.maxBet;
+
+    const wager = Math.floor(Number(body.wager || body.stake));
+    if (!wager || wager < minBet) {
+      return NextResponse.json(
+        { success: false, code: 'MIN_WAGER', message: `Minimum wager is KES ${minBet}.` },
         { status: 400 }
       );
     }
 
-    if (wager > HILO_CONFIG.maxBet) {
+    if (wager > maxBet) {
       return NextResponse.json(
-        { success: false, code: 'MAX_WAGER', message: `Maximum wager is KES ${HILO_CONFIG.maxBet.toLocaleString()}.` },
+        { success: false, code: 'MAX_WAGER', message: `Maximum wager is KES ${maxBet.toLocaleString()}.` },
         { status: 400 }
       );
     }

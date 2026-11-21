@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withTransaction } from '../../../../../lib/db';
 import { getAuthSession } from '../../../../../lib/auth/server';
+import { getGameSettings } from '../../../../../lib/games/gameSettingsManager';
 import {
   PLINKO_ROWS,
   PLINKO_RISKS,
@@ -26,17 +27,28 @@ export async function POST(request) {
       return NextResponse.json({ success: false, code: 'INVALID_JSON', message: 'Malformed JSON payload.' }, { status: 400 });
     }
 
-    const wager = Math.floor(Number(body.wager || body.stake));
-    if (!wager || wager < DEFAULT_PLINKO_CONFIG.minBet) {
+    const settings = await getGameSettings('plinko');
+    if (settings?.isPaused) {
       return NextResponse.json(
-        { success: false, code: 'MIN_WAGER', message: `Minimum wager is KES ${DEFAULT_PLINKO_CONFIG.minBet}.` },
+        { success: false, code: 'GAME_PAUSED', message: 'JetPesa Plinko is temporarily paused for scheduled maintenance.' },
+        { status: 403 }
+      );
+    }
+
+    const minBet = Number(settings?.minBet) || DEFAULT_PLINKO_CONFIG.minBet;
+    const maxBet = Number(settings?.maxBet) || DEFAULT_PLINKO_CONFIG.maxBet;
+
+    const wager = Math.floor(Number(body.wager || body.stake));
+    if (!wager || wager < minBet) {
+      return NextResponse.json(
+        { success: false, code: 'MIN_WAGER', message: `Minimum wager is KES ${minBet}.` },
         { status: 400 }
       );
     }
 
-    if (wager > DEFAULT_PLINKO_CONFIG.maxBet) {
+    if (wager > maxBet) {
       return NextResponse.json(
-        { success: false, code: 'MAX_WAGER', message: `Maximum wager is KES ${DEFAULT_PLINKO_CONFIG.maxBet.toLocaleString()}.` },
+        { success: false, code: 'MAX_WAGER', message: `Maximum wager is KES ${maxBet.toLocaleString()}.` },
         { status: 400 }
       );
     }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withTransaction } from '../../../../../lib/db';
 import { getAuthSession } from '../../../../../lib/auth/server';
+import { getGameSettings } from '../../../../../lib/games/gameSettingsManager';
 import {
   COINFLIP_CONFIG,
   generateCoinflipKeyPair,
@@ -24,17 +25,28 @@ export async function POST(request) {
       return NextResponse.json({ success: false, code: 'INVALID_JSON', message: 'Malformed JSON payload.' }, { status: 400 });
     }
 
-    const wager = Math.floor(Number(body.wager || body.stake));
-    if (!wager || wager < COINFLIP_CONFIG.minBet) {
+    const settings = await getGameSettings('coinflip');
+    if (settings?.isPaused) {
       return NextResponse.json(
-        { success: false, code: 'MIN_WAGER', message: `Minimum wager is KES ${COINFLIP_CONFIG.minBet}.` },
+        { success: false, code: 'GAME_PAUSED', message: 'Turbo Coinflip is temporarily paused for scheduled maintenance.' },
+        { status: 403 }
+      );
+    }
+
+    const minBet = Number(settings?.minBet) || COINFLIP_CONFIG.minBet;
+    const maxBet = Number(settings?.maxBet) || COINFLIP_CONFIG.maxBet;
+
+    const wager = Math.floor(Number(body.wager || body.stake));
+    if (!wager || wager < minBet) {
+      return NextResponse.json(
+        { success: false, code: 'MIN_WAGER', message: `Minimum wager is KES ${minBet}.` },
         { status: 400 }
       );
     }
 
-    if (wager > COINFLIP_CONFIG.maxBet) {
+    if (wager > maxBet) {
       return NextResponse.json(
-        { success: false, code: 'MAX_WAGER', message: `Maximum wager is KES ${COINFLIP_CONFIG.maxBet.toLocaleString()}.` },
+        { success: false, code: 'MAX_WAGER', message: `Maximum wager is KES ${maxBet.toLocaleString()}.` },
         { status: 400 }
       );
     }

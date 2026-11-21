@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withTransaction } from '../../../../../lib/db';
 import { getAuthSession } from '../../../../../lib/auth/server';
+import { getGameSettings } from '../../../../../lib/games/gameSettingsManager';
 import {
   TOTAL_TILES,
   MIN_MINES,
@@ -27,9 +28,22 @@ export async function POST(request) {
       return NextResponse.json({ success: false, code: 'INVALID_JSON', message: 'Malformed JSON payload.' }, { status: 400 });
     }
 
+    const settings = await getGameSettings('mines');
+    if (settings?.isPaused) {
+      return NextResponse.json(
+        { success: false, code: 'GAME_PAUSED', message: 'JetPesa Mines is temporarily paused for scheduled maintenance.' },
+        { status: 403 }
+      );
+    }
+
+    const minBet = Number(settings?.minBet) || 10;
+    const maxBet = Number(settings?.maxBet) || 30000;
     const wager = Math.floor(Number(body.wager || body.stake));
-    if (!wager || wager < 10) {
-      return NextResponse.json({ success: false, code: 'MIN_WAGER', message: 'Minimum wager is KES 10.' }, { status: 400 });
+    if (!wager || wager < minBet) {
+      return NextResponse.json({ success: false, code: 'MIN_WAGER', message: `Minimum wager is KES ${minBet}.` }, { status: 400 });
+    }
+    if (wager > maxBet) {
+      return NextResponse.json({ success: false, code: 'MAX_WAGER', message: `Maximum wager is KES ${maxBet.toLocaleString()}.` }, { status: 400 });
     }
 
     const minesCount = Math.floor(Number(body.minesCount || body.mines || 3));

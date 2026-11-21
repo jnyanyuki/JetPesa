@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withTransaction } from '../../../../../lib/db';
 import { getAuthSession } from '../../../../../lib/auth/server';
+import { getGameSettings } from '../../../../../lib/games/gameSettingsManager';
 import {
   ROULETTE_CONFIG,
   resolveRouletteSpin,
@@ -25,6 +26,17 @@ export async function POST(request) {
       return NextResponse.json({ success: false, code: 'INVALID_JSON', message: 'Malformed JSON payload.' }, { status: 400 });
     }
 
+    const settings = await getGameSettings('roulette');
+    if (settings?.isPaused) {
+      return NextResponse.json(
+        { success: false, code: 'GAME_PAUSED', message: 'Turbo Mini-Roulette is temporarily paused for scheduled maintenance.' },
+        { status: 403 }
+      );
+    }
+
+    const minBet = Number(settings?.minBet) || ROULETTE_CONFIG.minBet;
+    const maxBet = Number(settings?.maxBet) || ROULETTE_CONFIG.maxBet;
+
     const bets = Array.isArray(body.bets) ? body.bets : [];
     if (bets.length === 0) {
       return NextResponse.json(
@@ -36,13 +48,20 @@ export async function POST(request) {
     let calculatedTotalStake = 0;
     for (const b of bets) {
       const amt = Number(b.amount);
-      if (isNaN(amt) || amt < ROULETTE_CONFIG.minBet) {
+      if (isNaN(amt) || amt < minBet) {
         return NextResponse.json(
-          { success: false, code: 'MIN_BET', message: `Minimum bet per placement is KES ${ROULETTE_CONFIG.minBet}.` },
+          { success: false, code: 'MIN_BET', message: `Minimum bet per placement is KES ${minBet}.` },
           { status: 400 }
         );
       }
       calculatedTotalStake += amt;
+    }
+
+    if (calculatedTotalStake > maxBet) {
+      return NextResponse.json(
+        { success: false, code: 'MAX_TOTAL_WAGER', message: `Total spin wager cannot exceed KES ${maxBet.toLocaleString()}.` },
+        { status: 400 }
+      );
     }
 
     if (calculatedTotalStake > ROULETTE_CONFIG.maxBet) {

@@ -35,6 +35,15 @@ export default function JetPesaAdminPage() {
   const [penaltyMinBet, setPenaltyMinBet] = useState(10);
   const [penaltyMaxBet, setPenaltyMaxBet] = useState(40000);
 
+  // TAB 7: All Games Command Center State
+  const [selectedAdminGame, setSelectedAdminGame] = useState('mines');
+  const [gamesOverview, setGamesOverview] = useState(null);
+  const [gamesLoading, setGamesLoading] = useState(false);
+  const [selectedGameRounds, setSelectedGameRounds] = useState([]);
+  const [roundsLoading, setRoundsLoading] = useState(false);
+  const [gameConfigDraft, setGameConfigDraft] = useState(null);
+  const [gameSaving, setGameSaving] = useState(false);
+
   const [overrideModal, setOverrideModal] = useState({ open: false, cycleIndex: null, currentPoint: 2.0, newPoint: '' });
   const [adjustModal, setAdjustModal] = useState({ open: false, user: null, amount: '', reason: '' });
   const [instantCrashing, setInstantCrashing] = useState(false);
@@ -327,6 +336,77 @@ export default function JetPesaAdminPage() {
     }
   };
 
+  // Load All Games Telemetry Overview
+  const loadGamesOverview = useCallback(async () => {
+    setGamesLoading(true);
+    try {
+      const res = await adminFetch('/api/admin/games');
+      const data = await res.json();
+      if (data.success) {
+        setGamesOverview(data);
+        if (data.games && data.games[selectedAdminGame]?.settings) {
+          setGameConfigDraft((prev) => prev || data.games[selectedAdminGame].settings);
+        }
+      }
+    } catch (err) {
+      console.warn('Games telemetry fetch error:', err);
+    } finally {
+      setGamesLoading(false);
+    }
+  }, [adminFetch, selectedAdminGame]);
+
+  // Load Recent Rounds & Provably Fair Trail for Selected Game
+  const loadSelectedGameRounds = useCallback(async (gameId) => {
+    setRoundsLoading(true);
+    try {
+      const targetId = gameId || selectedAdminGame;
+      const res = await adminFetch(`/api/admin/games/rounds?gameId=${encodeURIComponent(targetId)}&limit=30`);
+      const data = await res.json();
+      if (data.success) {
+        setSelectedGameRounds(data.rounds || []);
+      }
+    } catch (err) {
+      console.warn('Game rounds fetch error:', err);
+    } finally {
+      setRoundsLoading(false);
+    }
+  }, [adminFetch, selectedAdminGame]);
+
+  const handleSelectGame = (gameId) => {
+    setSelectedAdminGame(gameId);
+    if (gamesOverview?.games && gamesOverview.games[gameId]?.settings) {
+      setGameConfigDraft(gamesOverview.games[gameId].settings);
+    }
+    loadSelectedGameRounds(gameId);
+  };
+
+  const handleSaveGameConfig = async () => {
+    if (!gameConfigDraft) return;
+    setGameSaving(true);
+    try {
+      const res = await adminFetch('/api/admin/games/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: selectedAdminGame,
+          settings: gameConfigDraft,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || `Settings updated successfully!`, 'success');
+        setGameConfigDraft(data.settings);
+        loadGamesOverview();
+      } else {
+        showToast(data.message || 'Failed to update settings', 'error');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setGameSaving(false);
+    }
+  };
+
   // Initial Auth Check
   useEffect(() => {
     const saved = getStoredSecret();
@@ -357,12 +437,13 @@ export default function JetPesaAdminPage() {
       if (activeTab === 'overview') loadOverview();
       else if (activeTab === 'bets') loadBets();
       else if (activeTab === 'ledger') loadLedger();
+      else if (activeTab === 'games') loadGamesOverview();
     }, 2500);
 
     return () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
-  }, [isAuthenticated, activeTab, loadRoundsRadar, loadOverview, loadBets, loadLedger]);
+  }, [isAuthenticated, activeTab, loadRoundsRadar, loadOverview, loadBets, loadLedger, loadGamesOverview]);
 
   // Tab switch loader
   useEffect(() => {
@@ -373,7 +454,11 @@ export default function JetPesaAdminPage() {
     else if (activeTab === 'bets') loadBets();
     else if (activeTab === 'ledger') loadLedger();
     else if (activeTab === 'penalty') loadPenaltyAdminData();
-  }, [activeTab, isAuthenticated, loadRoundsRadar, loadOverview, loadUsers, loadBets, loadLedger, loadPenaltyAdminData, userSearch]);
+    else if (activeTab === 'games') {
+      loadGamesOverview();
+      loadSelectedGameRounds(selectedAdminGame);
+    }
+  }, [activeTab, isAuthenticated, loadRoundsRadar, loadOverview, loadUsers, loadBets, loadLedger, loadPenaltyAdminData, loadGamesOverview, loadSelectedGameRounds, selectedAdminGame, userSearch]);
 
   // Save Round Override
   const submitRoundOverride = async () => {
@@ -884,6 +969,16 @@ export default function JetPesaAdminPage() {
 
       {/* Navigation Tabs */}
       <nav className="jp-admin-tabs">
+        <button
+          className={`jp-admin-tab-btn ${activeTab === 'games' ? 'active' : ''}`}
+          onClick={() => setActiveTab('games')}
+          style={{
+            background: activeTab === 'games' ? 'linear-gradient(135deg, #0284c7, #2563eb)' : undefined,
+            fontWeight: 800,
+          }}
+        >
+          🎮 All Games Command Center
+        </button>
         <button
           className={`jp-admin-tab-btn ${activeTab === 'radar' ? 'active' : ''}`}
           onClick={() => setActiveTab('radar')}
@@ -2132,6 +2227,772 @@ export default function JetPesaAdminPage() {
                 </button>
               </div>
             </section>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 7: ALL GAMES COMMAND CENTER & RISK TELEMETRY                  */}
+        {/* ================================================================= */}
+        {activeTab === 'games' && (
+          <div className="jp-admin-games-view">
+            {/* Header / Actions */}
+            <div className="jp-panel-header" style={{ marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span>🎮</span> All Games Command Center & Math Engine Risk Management
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: 11, color: '#94a3b8' }}>
+                  Real-time financial telemetry, house margin enforcement, risk parameters, and provably fair audits across all 8 JetPesa originals.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  loadGamesOverview();
+                  loadSelectedGameRounds(selectedAdminGame);
+                }}
+                disabled={gamesLoading || roundsLoading}
+                className="jp-btn-refresh"
+                style={{
+                  padding: '7px 14px',
+                  fontSize: 11,
+                  background: '#1e293b',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#fff',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                {gamesLoading ? 'Refreshing Telemetry...' : '🔄 Refresh All Telemetry'}
+              </button>
+            </div>
+
+            {/* Platform-Wide Financials 4-Card KPI Banner */}
+            <div className="jp-kpi-grid" style={{ marginBottom: 20 }}>
+              <div className="jp-kpi-card">
+                <span className="jp-kpi-label">TOTAL PLATFORM TURNOVER</span>
+                <div className="jp-kpi-val text-amber">
+                  KES {(gamesOverview?.totals?.grandTotalStaked || 0).toLocaleString()}
+                </div>
+                <small>Gross turnover across 8 games</small>
+              </div>
+
+              <div className="jp-kpi-card">
+                <span className="jp-kpi-label">TOTAL PLAYER PAYOUTS</span>
+                <div className="jp-kpi-val text-rose">
+                  KES {(gamesOverview?.totals?.grandTotalWon || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <small>Total winnings paid to players</small>
+              </div>
+
+              <div className="jp-kpi-card">
+                <span className="jp-kpi-label">NET PLATFORM GGR (HOUSE PROFIT)</span>
+                <div className={`jp-kpi-val ${(gamesOverview?.totals?.grandGgr || 0) >= 0 ? 'text-green' : 'text-rose'}`}>
+                  {(gamesOverview?.totals?.grandGgr || 0) >= 0 ? '+' : ''}KES {(gamesOverview?.totals?.grandGgr || 0).toFixed(2)}
+                </div>
+                <small>Net platform gaming revenue</small>
+              </div>
+
+              <div className="jp-kpi-card">
+                <span className="jp-kpi-label">REALIZED PLATFORM RTP</span>
+                <div className="jp-kpi-val text-cyan">
+                  {gamesOverview?.totals?.platformRtp || 0}%
+                </div>
+                <small>Across {(gamesOverview?.totals?.grandTotalRounds || 0).toLocaleString()} recorded rounds</small>
+              </div>
+            </div>
+
+            {/* 8-Game Navigation Selector Bar */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
+                gap: 10,
+                marginBottom: 20,
+              }}
+            >
+              {[
+                { id: 'aviator', icon: '🚀', name: 'JetPesa Aviator', tag: 'CRASH' },
+                { id: 'mines', icon: '💣', name: 'JetPesa Mines', tag: 'INSTANT' },
+                { id: 'penalty', icon: '⚽', name: 'Penalty Shootout', tag: 'SPORTS' },
+                { id: 'plinko', icon: '🔺', name: 'JetPesa Plinko', tag: 'CRASH' },
+                { id: 'dice', icon: '🎲', name: 'Classic Dice', tag: 'DICE' },
+                { id: 'coinflip', icon: '🪙', name: 'Turbo Coinflip', tag: 'INSTANT' },
+                { id: 'hilo', icon: '🃏', name: 'Hi-Lo Card Duel', tag: 'TABLE' },
+                { id: 'roulette', icon: '🎯', name: 'Mini-Roulette', tag: 'TABLE' },
+              ].map((g) => {
+                const isSelected = selectedAdminGame === g.id;
+                const gData = gamesOverview?.games?.[g.id];
+                const isPaused = gData?.settings?.isPaused;
+                const ggr = gData?.netHouseProfit || 0;
+
+                return (
+                  <button
+                    key={g.id}
+                    onClick={() => handleSelectGame(g.id)}
+                    style={{
+                      background: isSelected
+                        ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.25), rgba(2, 132, 199, 0.35))'
+                        : '#0b1329',
+                      border: isSelected
+                        ? '2px solid #38bdf8'
+                        : '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: 10,
+                      padding: '12px 10px',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'all 0.2s ease',
+                      position: 'relative',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 18 }}>{g.icon}</span>
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          background: isPaused ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)',
+                          color: isPaused ? '#ef4444' : '#22c55e',
+                          border: `1px solid ${isPaused ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
+                        }}
+                      >
+                        {isPaused ? 'PAUSED' : 'LIVE'}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#fff', marginBottom: 2 }}>
+                      {g.name}
+                    </div>
+
+                    <div style={{ fontSize: 10, color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{g.tag}</span>
+                      <span style={{ color: ggr >= 0 ? '#4ade80' : '#f87171', fontWeight: 700 }}>
+                        {ggr >= 0 ? '+' : ''}KES {Math.round(ggr).toLocaleString()}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected Game Detailed Management Station */}
+            {(() => {
+              const gameStats = gamesOverview?.games?.[selectedAdminGame] || {};
+              const gameSettings = gameConfigDraft || gameStats?.settings || {};
+              const targetRtp = Number(gameSettings?.targetRtp || 97.5);
+              const houseEdge = Number((100 - targetRtp).toFixed(2));
+
+              return (
+                <div>
+                  {/* Game Detail Header */}
+                  <div
+                    style={{
+                      background: '#090e1d',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: 12,
+                      padding: '16px 20px',
+                      marginBottom: 20,
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 16,
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <h2 style={{ margin: 0, fontSize: 20, color: '#fff', fontWeight: 900 }}>
+                          {gameSettings.title || selectedAdminGame}
+                        </h2>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(56, 189, 248, 0.15)',
+                            color: '#38bdf8',
+                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                          }}
+                        >
+                          CATEGORY: {gameSettings.category || 'ORIGINALS'}
+                        </span>
+                      </div>
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
+                        ID: <code style={{ color: '#fbbf24' }}>{selectedAdminGame}</code> • Dynamic Provably Fair SHA-256 Engine
+                      </p>
+                    </div>
+
+                    {/* Emergency Killswitch Toggle */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#cbd5e1' }}>
+                        OPERATIONAL STATUS:
+                      </span>
+                      <button
+                        onClick={() => {
+                          setGameConfigDraft((prev) => ({
+                            ...(prev || gameSettings),
+                            isPaused: !Boolean(prev?.isPaused ?? gameSettings?.isPaused),
+                          }));
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '8px 16px',
+                          borderRadius: 8,
+                          border: gameConfigDraft?.isPaused ? '1px solid #ef4444' : '1px solid #22c55e',
+                          background: gameConfigDraft?.isPaused ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                          color: gameConfigDraft?.isPaused ? '#ef4444' : '#22c55e',
+                          cursor: 'pointer',
+                          fontWeight: 800,
+                          fontSize: 12,
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        <span>{gameConfigDraft?.isPaused ? '🔴' : '🟢'}</span>
+                        {gameConfigDraft?.isPaused ? 'GAME PAUSED (MAINTENANCE)' : 'OPERATIONAL (ACCEPTING BETS)'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 4-Card Game Telemetry Grid (Aviator Style) */}
+                  <div className="jp-engine-metrics-grid" style={{ marginBottom: 20 }}>
+                    <div className="jp-engine-metric-card">
+                      <span className="jp-engine-metric-label">GROSS WAGERS & TURNOVER</span>
+                      <span className="jp-engine-metric-val val-blue">
+                        KES {(gameStats.totalStaked || 0).toLocaleString()}
+                      </span>
+                      <span className="jp-engine-metric-sub">
+                        Across {(gameStats.totalRounds || 0).toLocaleString()} played rounds
+                      </span>
+                    </div>
+
+                    <div className="jp-engine-metric-card">
+                      <span className="jp-engine-metric-label">TOTAL PLAYER CASHOUTS</span>
+                      <span className="jp-engine-metric-val val-green">
+                        KES {(gameStats.totalWon || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                      <span className="jp-engine-metric-sub">
+                        Win Rate: {gameStats.winRate || 0}% of rounds
+                      </span>
+                    </div>
+
+                    <div className="jp-engine-metric-card">
+                      <span className="jp-engine-metric-label">NET HOUSE PROFIT (GGR)</span>
+                      <span className={`jp-engine-metric-val ${(gameStats.netHouseProfit || 0) >= 0 ? 'val-green' : 'val-red'}`}>
+                        {(gameStats.netHouseProfit || 0) >= 0 ? '+' : ''}KES {(gameStats.netHouseProfit || 0).toFixed(2)}
+                      </span>
+                      <span className="jp-engine-metric-sub">
+                        Retention: {((100 - (gameStats.realizedRtp || 0))).toFixed(1)}% of total wagers
+                      </span>
+                    </div>
+
+                    <div className="jp-engine-metric-card highlight-target">
+                      <span className="jp-engine-metric-label">REALIZED RTP vs TARGET RTP</span>
+                      <span className="jp-engine-metric-val val-gold">
+                        {gameStats.realizedRtp || 0}%
+                      </span>
+                      <span className="jp-engine-metric-sub">
+                        Target RTP: {targetRtp}% (House Edge: {houseEdge}%)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Mathematical Risk, Margin & Volatility Tuning Panel */}
+                  <section className="jp-admin-panel" style={{ marginBottom: 24, padding: 20 }}>
+                    <div className="jp-panel-header" style={{ marginBottom: 16 }}>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span>⚙️</span> Risk, Margin & Multipliers Mathematical Engine
+                        </h4>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                          Tune return-to-player percentages, stake boundaries, and game parameters in real-time.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+                      {/* Left Column: RTP & Stake Limits */}
+                      <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                            <label style={{ fontSize: 12, fontWeight: 800, color: '#cbd5e1' }}>
+                              TARGET RTP (RETURN TO PLAYER):
+                            </label>
+                            <span style={{ fontSize: 13, fontWeight: 900, color: '#38bdf8' }}>
+                              {gameConfigDraft?.targetRtp || 97.5}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="85.0"
+                            max="99.5"
+                            step="0.1"
+                            value={gameConfigDraft?.targetRtp || 97.5}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setGameConfigDraft((prev) => ({
+                                ...(prev || gameSettings),
+                                targetRtp: val,
+                                houseEdge: parseFloat((100 - val).toFixed(2)),
+                              }));
+                            }}
+                            style={{ width: '100%', accentColor: '#38bdf8', cursor: 'pointer' }}
+                          />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                            <span>85.0% (Tight House Edge: 15%)</span>
+                            <span style={{ color: '#22c55e', fontWeight: 700 }}>
+                              House Edge: {(100 - (gameConfigDraft?.targetRtp || 97.5)).toFixed(1)}%
+                            </span>
+                            <span>99.5% (Max Loose)</span>
+                          </div>
+                        </div>
+
+                        {/* Min / Max Bet Controls */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                          <div>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                              MIN BET (KES):
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={gameConfigDraft?.minBet ?? 10}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10) || 1;
+                                setGameConfigDraft((prev) => ({
+                                  ...(prev || gameSettings),
+                                  minBet: val,
+                                }));
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '8px 10px',
+                                background: '#1e293b',
+                                border: '1px solid rgba(255,255,255,0.15)',
+                                borderRadius: 6,
+                                color: '#fff',
+                                fontSize: 13,
+                                fontWeight: 800,
+                              }}
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                              MAX BET (KES):
+                            </label>
+                            <input
+                              type="number"
+                              min="100"
+                              step="1000"
+                              value={gameConfigDraft?.maxBet ?? 50000}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10) || 1000;
+                                setGameConfigDraft((prev) => ({
+                                  ...(prev || gameSettings),
+                                  maxBet: val,
+                                }));
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '8px 10px',
+                                background: '#1e293b',
+                                border: '1px solid rgba(255,255,255,0.15)',
+                                borderRadius: 6,
+                                color: '#fff',
+                                fontSize: 13,
+                                fontWeight: 800,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Column: Game-Specific Parameter Controls */}
+                      <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: '#cbd5e1', marginBottom: 12 }}>
+                          GAME-SPECIFIC RISK & ENGINE PARAMETERS:
+                        </div>
+
+                        {selectedAdminGame === 'aviator' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                MAX MULTIPLIER CAP:
+                              </label>
+                              <input
+                                type="number"
+                                value={gameConfigDraft?.maxMultiplier ?? 10000}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, maxMultiplier: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                PROFIT TARGET (%):
+                              </label>
+                              <input
+                                type="number"
+                                value={gameConfigDraft?.profitTargetPercent ?? 50}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, profitTargetPercent: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedAdminGame === 'mines' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                MAX HIDDEN MINES:
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="24"
+                                value={gameConfigDraft?.maxMines ?? 24}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, maxMines: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                MULTIPLIER CAP (x):
+                              </label>
+                              <input
+                                type="number"
+                                value={gameConfigDraft?.maxMultiplier ?? 5000}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, maxMultiplier: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedAdminGame === 'plinko' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                MAX SELECTABLE ROWS:
+                              </label>
+                              <input
+                                type="number"
+                                min="8"
+                                max="16"
+                                value={gameConfigDraft?.maxRows ?? 16}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, maxRows: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                            <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center' }}>
+                              <span>Available risk tiers: Low, Medium, High</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedAdminGame === 'dice' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                MIN ROLL TARGET:
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={gameConfigDraft?.minRoll ?? 1.00}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, minRoll: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                MAX ROLL TARGET:
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={gameConfigDraft?.maxRoll ?? 98.00}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, maxRoll: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedAdminGame === 'coinflip' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                BASE FLIP MULTIPLIER:
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={gameConfigDraft?.baseMultiplier ?? 1.96}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, baseMultiplier: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                MAX CONSECUTIVE STREAK:
+                              </label>
+                              <input
+                                type="number"
+                                min="3"
+                                max="25"
+                                value={gameConfigDraft?.maxStreak ?? 15}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, maxStreak: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedAdminGame === 'hilo' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                MAX SKIPS ALLOWED:
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="10"
+                                value={gameConfigDraft?.maxSkips ?? 3}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, maxSkips: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                SAME RANK MULTIPLIER:
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={gameConfigDraft?.sameMultiplier ?? 12.61}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, sameMultiplier: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedAdminGame === 'roulette' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                STRAIGHT-UP PAYOUT (x):
+                              </label>
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={gameConfigDraft?.straightMultiplier ?? 36.0}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, straightMultiplier: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                            <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center' }}>
+                              <span>European 37-pocket wheel (0-36). Outside bets return 2.0x.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedAdminGame === 'penalty' && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 4 }}>
+                                MAX SHOTS IN STREAK:
+                              </label>
+                              <input
+                                type="number"
+                                min="3"
+                                max="15"
+                                value={gameConfigDraft?.maxShots ?? 8}
+                                onChange={(e) => setGameConfigDraft((prev) => ({ ...prev, maxShots: Number(e.target.value) }))}
+                                style={{ width: '100%', padding: '8px 10px', background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 800 }}
+                              />
+                            </div>
+                            <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center' }}>
+                              <span>For custom shot-by-shot ladders, visit the dedicated Penalty tab.</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
+                      <button
+                        onClick={() => {
+                          if (gameStats?.settings) setGameConfigDraft({ ...gameStats.settings });
+                        }}
+                        disabled={gameSaving}
+                        style={{
+                          padding: '10px 18px',
+                          background: '#1e293b',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          borderRadius: 8,
+                          color: '#94a3b8',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Reset to Stored Settings
+                      </button>
+
+                      <button
+                        onClick={handleSaveGameConfig}
+                        disabled={gameSaving}
+                        style={{
+                          padding: '10px 26px',
+                          background: 'linear-gradient(135deg, #0284c7, #2563eb)',
+                          border: 'none',
+                          borderRadius: 8,
+                          color: '#fff',
+                          fontSize: 13,
+                          fontWeight: 900,
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                        }}
+                      >
+                        {gameSaving ? 'SAVING CONFIGURATION...' : `💾 SAVE ${gameSettings.title?.toUpperCase() || 'GAME'} CONFIGURATION`}
+                      </button>
+                    </div>
+                  </section>
+
+                  {/* Live Rounds Audit & Provably Fair Trail Table */}
+                  <section className="jp-admin-panel">
+                    <div className="jp-panel-header" style={{ marginBottom: 14 }}>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span>🎲</span> Live Rounds & Provably Fair Audit Trail ({selectedGameRounds.length} Rounds)
+                        </h4>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                          Transparent cryptographic audit of recent rounds, player stakes, outcomes, and seed hashes.
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => loadSelectedGameRounds(selectedAdminGame)}
+                        disabled={roundsLoading}
+                        style={{
+                          padding: '5px 12px',
+                          fontSize: 11,
+                          background: '#1e293b',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          color: '#fff',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {roundsLoading ? 'Loading Rounds...' : '🔄 Refresh Trail'}
+                      </button>
+                    </div>
+
+                    <div className="jp-admin-table-wrap" style={{ maxHeight: 420, overflowY: 'auto' }}>
+                      <table className="jp-admin-table" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#0b1329', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                            <th style={{ padding: '10px 12px', fontSize: 11, color: '#94a3b8' }}>ROUND / DROP ID</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, color: '#94a3b8' }}>PILOT / USER</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, color: '#94a3b8' }}>STAKE</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, color: '#94a3b8' }}>MULTIPLIER</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, color: '#94a3b8' }}>PAYOUT</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, color: '#94a3b8' }}>STATUS</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, color: '#94a3b8' }}>DETAILS</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, color: '#94a3b8' }}>PROVABLY FAIR HASH</th>
+                            <th style={{ padding: '10px 12px', fontSize: 11, color: '#94a3b8' }}>TIME</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedGameRounds.length === 0 ? (
+                            <tr>
+                              <td colSpan="9" style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: 12 }}>
+                                {roundsLoading ? 'Loading recent rounds...' : 'No recorded rounds for this game yet.'}
+                              </td>
+                            </tr>
+                          ) : (
+                            selectedGameRounds.map((rnd, i) => {
+                              const isWon = rnd.status === 'WON' || rnd.status === 'CASHED_OUT';
+                              const isBust = rnd.status === 'BUSTED' || rnd.status === 'LOST';
+
+                              return (
+                                <tr
+                                  key={rnd.id || i}
+                                  style={{
+                                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                    background: i % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent',
+                                  }}
+                                >
+                                  <td style={{ padding: '8px 12px', fontSize: 11, fontFamily: 'monospace', color: '#93c5fd' }}>
+                                    {rnd.id}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', fontSize: 11, color: '#fff', fontWeight: 600 }}>
+                                    {rnd.user || 'Unknown'}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', fontSize: 11, color: '#fbbf24', fontWeight: 700 }}>
+                                    KES {Number(rnd.stake || 0).toLocaleString()}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', fontSize: 11, color: '#fff', fontWeight: 800 }}>
+                                    {rnd.multiplier ? `${Number(rnd.multiplier).toFixed(2)}x` : '-'}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: '8px 12px',
+                                      fontSize: 11,
+                                      fontWeight: 800,
+                                      color: isWon ? '#4ade80' : '#94a3b8',
+                                    }}
+                                  >
+                                    KES {Number(rnd.payout || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                  <td style={{ padding: '8px 12px' }}>
+                                    <span
+                                      style={{
+                                        fontSize: 9.5,
+                                        fontWeight: 800,
+                                        padding: '2px 6px',
+                                        borderRadius: 4,
+                                        background: isWon
+                                          ? 'rgba(34, 197, 94, 0.2)'
+                                          : isBust
+                                          ? 'rgba(239, 68, 68, 0.2)'
+                                          : 'rgba(234, 179, 8, 0.2)',
+                                        color: isWon ? '#4ade80' : isBust ? '#f87171' : '#facc15',
+                                      }}
+                                    >
+                                      {rnd.status}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '8px 12px', fontSize: 10.5, color: '#cbd5e1' }}>
+                                    {rnd.details || '-'}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', fontSize: 10, fontFamily: 'monospace', color: '#64748b' }}>
+                                    <span title={rnd.seedHash}>
+                                      {rnd.seedHash ? `${rnd.seedHash.substring(0, 14)}...` : '-'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '8px 12px', fontSize: 10, color: '#64748b', whiteSpace: 'nowrap' }}>
+                                    {rnd.createdAt ? new Date(rnd.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-'}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </div>
+              );
+            })()}
           </div>
         )}
       </main>
