@@ -165,6 +165,7 @@ export default function UltimateJetPesaCockpit() {
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [profileWalletTab, setProfileWalletTab] = useState(null);
   const [isProvablyModalOpen, setIsProvablyModalOpen] = useState(false);
   const [isRainActive, setIsRainActive] = useState(false);
   const [audioMuted, setAudioMuted] = useState(false);
@@ -2103,12 +2104,174 @@ export default function UltimateJetPesaCockpit() {
             <Icon name="user" size={13} />
             <span className="jp-profile-label">{userIdCode ? `ID: ${userIdCode}` : 'PROFILE'}</span>
           </button>
-          <div className="jp-wallet-pill">
-            <button className="jp-wallet-balance" onClick={() => balance > 0 ? setIsWithdrawModalOpen(true) : triggerToast('Wallet is empty. Deposit first.', 'info')}>
-              <Icon name="wallet" size={15} />
-              <span className="jp-wallet-amount">{balance.toFixed(2)} KES</span>
-            </button>
-            <button className="jp-deposit-btn" onClick={() => setIsDepositModalOpen(true)}>DEPOSIT</button>
+          <div className="jp-wallet-anchor" style={{ position: 'relative' }}>
+            <div className="jp-wallet-pill">
+              <button
+                className={`jp-wallet-balance ${isWithdrawModalOpen ? 'active' : ''}`}
+                onClick={() => {
+                  setIsDepositModalOpen(false);
+                  if (balance > 0) {
+                    setIsWithdrawModalOpen((prev) => !prev);
+                  } else {
+                    triggerToast('Wallet is empty. Deposit first.', 'info');
+                  }
+                }}
+                title="Withdraw funds via M-Pesa B2C"
+              >
+                <Icon name="wallet" size={15} />
+                <span className="jp-wallet-amount">{balance.toFixed(2)} KES</span>
+              </button>
+              <button
+                className={`jp-deposit-btn ${isDepositModalOpen ? 'active' : ''}`}
+                onClick={() => {
+                  setIsWithdrawModalOpen(false);
+                  setIsDepositModalOpen((prev) => !prev);
+                }}
+              >
+                DEPOSIT
+              </button>
+            </div>
+
+            {/* Dropdown immediately below the wallet pill */}
+            {isDepositModalOpen && (
+              <>
+                <div className="jp-dropdown-backdrop" onClick={() => setIsDepositModalOpen(false)} />
+                <div className="jp-top-dropdown jp-top-deposit-dropdown">
+                  <div className="jp-dropdown-arrow" />
+                  <div className="jp-dropdown-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Icon name="arrow-down-left" size={16} color="#22c55e" />
+                      <h3 className="jp-modal-title" style={{ color: '#22c55e', margin: 0, fontSize: '13.5px' }}>M-Pesa Express Deposit</h3>
+                    </div>
+                    <button className="jp-dropdown-close" onClick={() => setIsDepositModalOpen(false)}>
+                      <Icon name="x" size={15} />
+                    </button>
+                  </div>
+
+                  <div className="jp-quick-chips-row">
+                    {[100, 200, 500, 1000, 2000].map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setInputAmount(String(amt))}
+                        className={`jp-quick-chip ${inputAmount === String(amt) ? 'active' : ''}`}
+                      >
+                        +{amt}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="jp-modal-field">
+                    <label className="jp-modal-label">DEPOSIT AMOUNT (MIN 10 KES)</label>
+                    <input
+                      type="number"
+                      value={inputAmount}
+                      onChange={(e) => setInputAmount(e.target.value)}
+                      className="jp-modal-input"
+                    />
+                  </div>
+
+                  <div className="jp-modal-field">
+                    <label className="jp-modal-label">M-PESA REGISTERED PHONE</label>
+                    <input
+                      type="text"
+                      value={inputPhone || editPhone || phoneProfile}
+                      onChange={(e) => setInputPhone(e.target.value)}
+                      placeholder="07XXXXXXXX or 01XXXXXXXX"
+                      className="jp-modal-input"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handlePaymentInitiation}
+                    disabled={loadingDeposit}
+                    className="jp-modal-btn jp-btn-green"
+                  >
+                    {loadingDeposit ? 'SENDING STK PROMPT...' : 'AUTHORIZE STK DEPOSIT'}
+                  </button>
+
+                  <div className="jp-manual-paybill-box">
+                    <div className="jp-manual-paybill-title">Manual Paybill Instructions:</div>
+                    <div>1. Paybill Business No: <strong style={{ color: '#22c55e' }}>1416998</strong></div>
+                    <div>2. Account No: <strong style={{ color: '#38bdf8' }}>RK06FTNUZX5T</strong></div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {isWithdrawModalOpen && (
+              <>
+                <div className="jp-dropdown-backdrop" onClick={() => setIsWithdrawModalOpen(false)} />
+                <div className="jp-top-dropdown jp-top-withdraw-dropdown">
+                  <div className="jp-dropdown-arrow" />
+                  <div className="jp-dropdown-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Icon name="arrow-up-right" size={16} color="#f59e0b" />
+                      <h3 className="jp-modal-title" style={{ color: '#f59e0b', margin: 0, fontSize: '13.5px' }}>M-Pesa Payout (B2C)</h3>
+                    </div>
+                    <button className="jp-dropdown-close" onClick={() => setIsWithdrawModalOpen(false)}>
+                      <Icon name="x" size={15} />
+                    </button>
+                  </div>
+
+                  <div className="jp-withdraw-avail-badge">
+                    <span>Available Cash:</span>
+                    <strong style={{ color: '#22c55e' }}>KES {balance.toFixed(2)}</strong>
+                  </div>
+
+                  <div className="jp-quick-chips-row">
+                    {[50, 100, 200, 500].map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setWithdrawAmount(String(amt))}
+                        disabled={balance < amt}
+                        className={`jp-quick-chip ${withdrawAmount === String(amt) ? 'active' : ''}`}
+                      >
+                        KES {amt}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setWithdrawAmount(String(Math.floor(balance)))}
+                      className="jp-quick-chip jp-chip-max"
+                    >
+                      MAX
+                    </button>
+                  </div>
+
+                  <div className="jp-modal-field">
+                    <label className="jp-modal-label">WITHDRAW AMOUNT (MIN 50 KES)</label>
+                    <input
+                      type="number"
+                      value={withdrawAmount}
+                      onChange={(e) => setWithdrawAmount(e.target.value)}
+                      placeholder="Minimum 50"
+                      className="jp-modal-input"
+                    />
+                  </div>
+
+                  <div className="jp-modal-field">
+                    <label className="jp-modal-label">RECEIVING M-PESA NUMBER</label>
+                    <input
+                      type="text"
+                      value={withdrawPhone || editPhone || phoneProfile}
+                      onChange={(e) => setWithdrawPhone(e.target.value)}
+                      placeholder="07XXXXXXXX or 01XXXXXXXX"
+                      className="jp-modal-input"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleWithdrawExecution}
+                    disabled={loadingWithdraw}
+                    className="jp-modal-btn jp-btn-orange"
+                  >
+                    {loadingWithdraw ? 'DISBURSING VIA B2C...' : 'DISBURSE TO M-PESA'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -2355,25 +2518,6 @@ export default function UltimateJetPesaCockpit() {
         </button>
       </div>
 
-      {/* Deposit Modal */}
-      {isDepositModalOpen && (
-        <div className="jp-modal-overlay" onClick={() => setIsDepositModalOpen(false)}>
-          <div className="jp-modal-box jp-modal-green" onClick={(e) => e.stopPropagation()}>
-            <button className="jp-modal-close" onClick={() => setIsDepositModalOpen(false)}><Icon name="x" size={20} /></button>
-            <h3 className="jp-modal-title" style={{ color: '#22c55e' }}>M-Pesa Express Deposit</h3>
-            <div className="jp-modal-field"><label className="jp-modal-label">DEPOSIT AMOUNT (MIN 10 KES)</label><input type="number" value={inputAmount} onChange={(e) => setInputAmount(e.target.value)} className="jp-modal-input" /></div>
-            <div className="jp-modal-field"><label className="jp-modal-label">M-PESA REGISTERED PHONE</label><input type="text" value={inputPhone} onChange={(e) => setInputPhone(e.target.value)} placeholder="07XXXXXXXX or 01XXXXXXXX" className="jp-modal-input" /></div>
-            <button onClick={handlePaymentInitiation} disabled={loadingDeposit} className="jp-modal-btn jp-btn-green">{loadingDeposit ? 'SENDING STK PROMPT...' : 'AUTHORIZE STK DEPOSIT'}</button>
-
-            <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: '11px', color: '#94a3b8', lineHeight: '1.6' }}>
-              <div style={{ fontWeight: '700', color: '#f8fafc', marginBottom: '2px' }}>Manual Paybill Instructions:</div>
-              <div>1. Paybill Business No: <strong style={{ color: '#22c55e' }}>1416998</strong></div>
-              <div>2. Account No: <strong style={{ color: '#38bdf8' }}>RK06FTNUZX5T</strong></div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Profile Modal */}
       {isProfileModalOpen && (
         <div className="jp-modal-overlay" onClick={() => setIsProfileModalOpen(false)}>
@@ -2453,31 +2597,174 @@ export default function UltimateJetPesaCockpit() {
               <div className="jp-profile-wallet-actions">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsProfileModalOpen(false);
-                    setIsDepositModalOpen(true);
-                  }}
-                  className="jp-profile-action-btn jp-btn-deposit-mpesa"
+                  onClick={() => setProfileWalletTab((prev) => (prev === 'deposit' ? null : 'deposit'))}
+                  className={`jp-profile-action-btn jp-btn-deposit-mpesa ${profileWalletTab === 'deposit' ? 'jp-wallet-action-active' : ''}`}
                 >
-                  <Icon name="plus" size={14} />
-                  <span>DEPOSIT VIA M-PESA</span>
+                  <Icon name={profileWalletTab === 'deposit' ? 'chevron-up' : 'plus'} size={14} />
+                  <span>{profileWalletTab === 'deposit' ? 'HIDE DEPOSIT' : 'DEPOSIT VIA M-PESA'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     if (balance > 0) {
-                      setIsProfileModalOpen(false);
-                      setIsWithdrawModalOpen(true);
+                      setProfileWalletTab((prev) => (prev === 'withdraw' ? null : 'withdraw'));
                     } else {
                       triggerToast('Wallet is empty. Deposit first.', 'info');
                     }
                   }}
-                  className="jp-profile-action-btn jp-btn-withdraw-mpesa"
+                  className={`jp-profile-action-btn jp-btn-withdraw-mpesa ${profileWalletTab === 'withdraw' ? 'jp-wallet-action-active' : ''}`}
                 >
-                  <Icon name="wallet" size={14} />
-                  <span>WITHDRAW (B2C)</span>
+                  <Icon name={profileWalletTab === 'withdraw' ? 'chevron-up' : 'wallet'} size={14} />
+                  <span>{profileWalletTab === 'withdraw' ? 'HIDE WITHDRAW' : 'WITHDRAW (B2C)'}</span>
                 </button>
               </div>
+
+              {/* Inline Deposit Section immediately below */}
+              {profileWalletTab === 'deposit' && (
+                <div className="jp-profile-inline-form jp-inline-deposit">
+                  <div className="jp-inline-form-top">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Icon name="arrow-down-left" size={15} color="#22c55e" />
+                      <span className="jp-inline-form-title" style={{ color: '#22c55e' }}>M-Pesa Express Deposit</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProfileWalletTab(null)}
+                      className="jp-inline-close-btn"
+                      title="Close"
+                    >
+                      <Icon name="x" size={14} />
+                    </button>
+                  </div>
+
+                  <div className="jp-quick-chips-row">
+                    {[100, 200, 500, 1000, 2000].map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setInputAmount(String(amt))}
+                        className={`jp-quick-chip ${inputAmount === String(amt) ? 'active' : ''}`}
+                      >
+                        +{amt}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="jp-inline-field">
+                    <label className="jp-inline-label">DEPOSIT AMOUNT (MIN 10 KES)</label>
+                    <input
+                      type="number"
+                      value={inputAmount}
+                      onChange={(e) => setInputAmount(e.target.value)}
+                      className="jp-inline-input"
+                      placeholder="e.g. 100"
+                    />
+                  </div>
+
+                  <div className="jp-inline-field">
+                    <label className="jp-inline-label">M-PESA REGISTERED PHONE</label>
+                    <input
+                      type="text"
+                      value={inputPhone || editPhone || phoneProfile}
+                      onChange={(e) => setInputPhone(e.target.value)}
+                      placeholder="07XXXXXXXX or 01XXXXXXXX"
+                      className="jp-inline-input"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handlePaymentInitiation}
+                    disabled={loadingDeposit}
+                    className="jp-inline-submit-btn jp-btn-green"
+                  >
+                    {loadingDeposit ? 'SENDING STK PROMPT...' : 'AUTHORIZE STK DEPOSIT'}
+                  </button>
+
+                  <div className="jp-manual-paybill-box">
+                    <div className="jp-manual-paybill-title">Manual Paybill Instructions:</div>
+                    <div>1. Paybill Business No: <strong style={{ color: '#22c55e' }}>1416998</strong></div>
+                    <div>2. Account No: <strong style={{ color: '#38bdf8' }}>RK06FTNUZX5T</strong></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Inline Withdraw Section immediately below */}
+              {profileWalletTab === 'withdraw' && (
+                <div className="jp-profile-inline-form jp-inline-withdraw">
+                  <div className="jp-inline-form-top">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Icon name="arrow-up-right" size={15} color="#f59e0b" />
+                      <span className="jp-inline-form-title" style={{ color: '#f59e0b' }}>M-Pesa Payout (B2C)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProfileWalletTab(null)}
+                      className="jp-inline-close-btn"
+                      title="Close"
+                    >
+                      <Icon name="x" size={14} />
+                    </button>
+                  </div>
+
+                  <div className="jp-withdraw-avail-badge">
+                    <span>Available Cash:</span>
+                    <strong style={{ color: '#22c55e' }}>KES {balance.toFixed(2)}</strong>
+                  </div>
+
+                  <div className="jp-quick-chips-row">
+                    {[50, 100, 200, 500].map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setWithdrawAmount(String(amt))}
+                        disabled={balance < amt}
+                        className={`jp-quick-chip ${withdrawAmount === String(amt) ? 'active' : ''}`}
+                      >
+                        KES {amt}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setWithdrawAmount(String(Math.floor(balance)))}
+                      className="jp-quick-chip jp-chip-max"
+                    >
+                      MAX
+                    </button>
+                  </div>
+
+                  <div className="jp-inline-field">
+                    <label className="jp-inline-label">WITHDRAW AMOUNT (MIN 50 KES)</label>
+                    <input
+                      type="number"
+                      value={withdrawAmount}
+                      onChange={(e) => setWithdrawAmount(e.target.value)}
+                      placeholder="Minimum 50"
+                      className="jp-inline-input"
+                    />
+                  </div>
+
+                  <div className="jp-inline-field">
+                    <label className="jp-inline-label">RECEIVING M-PESA NUMBER</label>
+                    <input
+                      type="text"
+                      value={withdrawPhone || editPhone || phoneProfile}
+                      onChange={(e) => setWithdrawPhone(e.target.value)}
+                      placeholder="07XXXXXXXX or 01XXXXXXXX"
+                      className="jp-inline-input"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleWithdrawExecution}
+                    disabled={loadingWithdraw}
+                    className="jp-inline-submit-btn jp-btn-orange"
+                  >
+                    {loadingWithdraw ? 'DISBURSING VIA B2C...' : 'DISBURSE TO M-PESA'}
+                  </button>
+                </div>
+              )}
 
               {/* Linked M-Pesa Phone */}
               <div className="jp-input-group-vertical" style={{ marginTop: '10px' }}>
@@ -2620,20 +2907,6 @@ export default function UltimateJetPesaCockpit() {
                 <span>SIGN OUT OF JETPESA</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Withdraw Modal */}
-      {isWithdrawModalOpen && (
-        <div className="jp-modal-overlay" onClick={() => setIsWithdrawModalOpen(false)}>
-          <div className="jp-modal-box jp-modal-orange" onClick={(e) => e.stopPropagation()}>
-            <button className="jp-modal-close" onClick={() => setIsWithdrawModalOpen(false)}><Icon name="x" size={20} /></button>
-            <h3 className="jp-modal-title" style={{ color: '#f59e0b' }}>M-Pesa Payout (B2C)</h3>
-            <p className="jp-modal-balance">Available: <strong style={{ color: '#22c55e' }}>KES {balance.toFixed(2)}</strong></p>
-            <div className="jp-modal-field"><label className="jp-modal-label">WITHDRAW AMOUNT (MIN 50 KES)</label><input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} placeholder="Minimum 50" className="jp-modal-input" /></div>
-            <div className="jp-modal-field"><label className="jp-modal-label">RECEIVING M-PESA NUMBER</label><input type="text" value={withdrawPhone} onChange={(e) => setWithdrawPhone(e.target.value)} placeholder="07XXXXXXXX or 01XXXXXXXX" className="jp-modal-input" /></div>
-            <button onClick={handleWithdrawExecution} disabled={loadingWithdraw} className="jp-modal-btn jp-btn-orange">{loadingWithdraw ? 'DISBURSING VIA B2C...' : 'DISBURSE TO M-PESA'}</button>
           </div>
         </div>
       )}
@@ -3467,6 +3740,233 @@ export default function UltimateJetPesaCockpit() {
         }
         .jp-profile-action-btn:hover {
           filter: brightness(1.1);
+        }
+        .jp-wallet-action-active {
+          filter: brightness(1.25) !important;
+          box-shadow: 0 0 14px rgba(34, 197, 94, 0.45);
+          border-color: #22c55e !important;
+        }
+        .jp-btn-withdraw-mpesa.jp-wallet-action-active {
+          box-shadow: 0 0 14px rgba(245, 158, 11, 0.45);
+          border-color: #f59e0b !important;
+        }
+
+        /* === INLINE WALLET FORMS (PROFILE) === */
+        .jp-profile-inline-form {
+          margin-top: 10px;
+          padding: 12px 14px;
+          background: #07090e;
+          border-radius: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          animation: jpInlineSlideDown 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes jpInlineSlideDown {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .jp-inline-deposit {
+          border: 1px solid rgba(34, 197, 94, 0.35);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(34, 197, 94, 0.05);
+        }
+        .jp-inline-withdraw {
+          border: 1px solid rgba(245, 158, 11, 0.35);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(245, 158, 11, 0.05);
+        }
+        .jp-inline-form-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding-bottom: 6px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        }
+        .jp-inline-form-title {
+          font-size: 12.5px;
+          font-weight: 800;
+          letter-spacing: 0.3px;
+        }
+        .jp-inline-close-btn {
+          background: transparent;
+          border: none;
+          color: #94a3b8;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.15s;
+        }
+        .jp-inline-close-btn:hover {
+          color: #f8fafc;
+          background: rgba(255, 255, 255, 0.08);
+        }
+        .jp-inline-field {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .jp-inline-label {
+          font-size: 9.5px;
+          font-weight: 800;
+          color: #94a3b8;
+          letter-spacing: 0.4px;
+          text-transform: uppercase;
+        }
+        .jp-inline-input {
+          background: #0f1420;
+          border: 1px solid #1e293b;
+          border-radius: 7px;
+          padding: 8px 10px;
+          color: #ffffff;
+          font-size: 13px;
+          font-weight: 700;
+          outline: none;
+          transition: border-color 0.15s;
+        }
+        .jp-inline-input:focus {
+          border-color: #38bdf8;
+        }
+        .jp-inline-submit-btn {
+          width: 100%;
+          padding: 10px;
+          border-radius: 8px;
+          border: none;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          cursor: pointer;
+          transition: filter 0.15s;
+        }
+        .jp-inline-submit-btn:hover:not(:disabled) {
+          filter: brightness(1.1);
+        }
+        .jp-inline-submit-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .jp-quick-chips-row {
+          display: flex;
+          gap: 5px;
+        }
+        .jp-quick-chip {
+          flex: 1;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 6px;
+          padding: 5px 0;
+          font-size: 11px;
+          font-weight: 700;
+          color: #cbd5e1;
+          cursor: pointer;
+          text-align: center;
+          transition: all 0.15s;
+        }
+        .jp-quick-chip:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.1);
+          color: #ffffff;
+        }
+        .jp-quick-chip.active {
+          background: rgba(34, 197, 94, 0.2);
+          border-color: #22c55e;
+          color: #22c55e;
+        }
+        .jp-chip-max {
+          background: rgba(245, 158, 11, 0.15);
+          border-color: rgba(245, 158, 11, 0.35);
+          color: #f59e0b;
+        }
+        .jp-manual-paybill-box {
+          margin-top: 4px;
+          padding: 8px 10px;
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 6px;
+          font-size: 10.5px;
+          color: #94a3b8;
+          line-height: 1.5;
+        }
+        .jp-manual-paybill-title {
+          font-weight: 700;
+          color: #f8fafc;
+          margin-bottom: 2px;
+        }
+        .jp-withdraw-avail-badge {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 11.5px;
+          color: #94a3b8;
+          padding: 4px 6px;
+          background: rgba(255, 255, 255, 0.04);
+          border-radius: 6px;
+        }
+
+        /* === TOP BAR ANCHORED DROPDOWNS (IMMEDIATELY BELOW) === */
+        .jp-dropdown-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 1040;
+          background: transparent;
+        }
+        .jp-top-dropdown {
+          position: absolute;
+          top: calc(100% + 8px);
+          right: 0;
+          width: 320px;
+          background: #090d16;
+          border-radius: 12px;
+          padding: 14px;
+          z-index: 1050;
+          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1);
+          animation: jpDropdownSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        @keyframes jpDropdownSlide {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .jp-top-deposit-dropdown {
+          border-top: 2px solid #22c55e;
+        }
+        .jp-top-withdraw-dropdown {
+          border-top: 2px solid #f59e0b;
+        }
+        .jp-dropdown-arrow {
+          position: absolute;
+          top: -5px;
+          right: 28px;
+          width: 8px;
+          height: 8px;
+          background: #090d16;
+          border-left: 1px solid rgba(255, 255, 255, 0.15);
+          border-top: 1px solid rgba(255, 255, 255, 0.15);
+          transform: rotate(45deg);
+        }
+        .jp-dropdown-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding-bottom: 6px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .jp-dropdown-close {
+          background: transparent;
+          border: none;
+          color: #94a3b8;
+          cursor: pointer;
+          padding: 2px;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.15s;
+        }
+        .jp-dropdown-close:hover {
+          color: #f8fafc;
+          background: rgba(255, 255, 255, 0.08);
         }
 
         .jp-input-group-vertical {
