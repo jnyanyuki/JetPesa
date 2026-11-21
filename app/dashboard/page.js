@@ -307,32 +307,65 @@ export default function UltimateJetPesaCockpit() {
 
   useEffect(() => {
     const svgPlane = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 180">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 150">
         <defs>
-          <linearGradient id="bodyRed" x1="0" x2="1">
-            <stop offset="0%" stop-color="#ff6b6b"/>
-            <stop offset="45%" stop-color="#e11d48"/>
-            <stop offset="100%" stop-color="#7f1d1d"/>
+          <linearGradient id="planeBodyRed" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#ff334b"/>
+            <stop offset="45%" stop-color="#e51c24"/>
+            <stop offset="100%" stop-color="#990b1c"/>
           </linearGradient>
-          <linearGradient id="glass" x1="0" x2="1">
-            <stop offset="0%" stop-color="#dbeafe"/>
-            <stop offset="100%" stop-color="#1e293b"/>
+          <linearGradient id="planeWingShadow" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#c41024"/>
+            <stop offset="100%" stop-color="#69040e"/>
           </linearGradient>
-          <filter id="shadow">
-            <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.45"/>
-          </filter>
         </defs>
-        <g filter="url(#shadow)" transform="rotate(-12 210 90)">
-          <path d="M70 98 L12 60 L110 84 Z" fill="url(#bodyRed)" stroke="#111827" stroke-width="3"/>
-          <path d="M150 104 L40 168 L290 116 Z" fill="url(#bodyRed)" stroke="#111827" stroke-width="4"/>
-          <path d="M72 82 C145 44, 270 40, 360 74 C376 80, 376 96, 360 101 C260 130, 142 125, 72 100 C50 92, 50 88, 72 82 Z" fill="url(#bodyRed)" stroke="#111827" stroke-width="4"/>
-          <path d="M112 95 C175 84, 255 84, 340 92" stroke="#ffffff" stroke-width="5" opacity="0.45" fill="none"/>
-          <path d="M160 68 C190 48, 230 50, 252 72 C222 78, 192 80, 160 68 Z" fill="url(#glass)" stroke="#111827" stroke-width="2"/>
-          <path d="M78 82 L48 28 C76 28, 98 50, 105 80 Z" fill="url(#bodyRed)" stroke="#111827" stroke-width="4"/>
-          <ellipse cx="362" cy="88" rx="22" ry="15" fill="#1e293b" stroke="#000" stroke-width="3"/>
-          <circle cx="382" cy="88" r="10" fill="#d1d5db" stroke="#111827" stroke-width="3"/>
-          <circle cx="384" cy="88" r="4" fill="#ffffff" opacity="0.8"/>
+
+        <!-- Tail fin / Rudder -->
+        <path d="M 24 24 C 36 20, 56 38, 74 68 L 68 80 L 28 78 Z" fill="url(#planeBodyRed)" stroke="#450308" stroke-width="2.5" stroke-linejoin="round"/>
+        <!-- Horizontal stabilizer -->
+        <path d="M 18 76 L 52 76 L 46 84 L 16 82 Z" fill="#8f0817" stroke="#450308" stroke-width="2"/>
+
+        <!-- Left Main Wing (swept stunt wing) -->
+        <path d="M 180 82 L 132 130 C 128 134, 140 136, 150 133 L 238 88 Z" fill="url(#planeWingShadow)" stroke="#450308" stroke-width="2.5" stroke-linejoin="round"/>
+        <!-- Wing leading edge accent -->
+        <path d="M 235 89 L 148 133" stroke="#ff6b7e" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+
+        <!-- Fuselage Body -->
+        <path d="M 28 78 C 60 76, 98 66, 142 60 C 172 55, 215 55, 258 60 C 275 62, 288 66, 292 72 C 296 78, 292 84, 282 88 C 260 93, 225 93, 172 92 C 120 91, 62 85, 28 78 Z" fill="url(#planeBodyRed)" stroke="#450308" stroke-width="2.5" stroke-linejoin="round"/>
+
+        <!-- Top ridge highlight -->
+        <path d="M 72 68 C 118 61, 180 57, 268 62" fill="none" stroke="#ff8596" stroke-width="2" stroke-linecap="round" opacity="0.65"/>
+
+        <!-- Cockpit canopy -->
+        <path d="M 172 58 C 182 43, 210 43, 224 58 Z" fill="#0b0f19" stroke="#450308" stroke-width="2"/>
+        <path d="M 178 56 C 185 47, 203 47, 216 56 Z" fill="#38bdf8" opacity="0.45"/>
+        <circle cx="196" cy="51" r="5" fill="#f8fafc"/>
+
+        <!-- Stylized white 'X' on fuselage (official Aviator insignia) -->
+        <g stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" opacity="0.95">
+          <line x1="130" y1="67" x2="152" y2="84"/>
+          <line x1="152" y1="67" x2="130" y2="84"/>
         </g>
+
+        <!-- Engine Cowl band -->
+        <path d="M 278 62 C 288 65, 291 81, 280 89" fill="none" stroke="#ff6b7e" stroke-width="2" opacity="0.5"/>
+
+        <!-- Landing gear -->
+        <line x1="218" y1="92" x2="225" y2="116" stroke="#1f2937" stroke-width="3.5" stroke-linecap="round"/>
+        <ellipse cx="227" cy="120" rx="7" ry="10" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+        <circle cx="227" cy="120" r="3" fill="#94a3b8"/>
+
+        <!-- Nose spinner hub -->
+        <ellipse cx="293" cy="74" rx="7.5" ry="12" fill="#ba0c1e" stroke="#450308" stroke-width="2"/>
+
+        <!-- Propeller blur disc -->
+        <ellipse cx="298" cy="74" rx="9" ry="62" fill="rgba(255,255,255,0.22)"/>
+
+        <!-- Propeller blades -->
+        <path d="M 295 74 C 293 48, 296 26, 299 12 C 302 26, 300 48, 298 74 Z" fill="#dc2626" stroke="#3b0206" stroke-width="1.5"/>
+        <path d="M 295 74 C 293 100, 296 122, 299 136 C 302 122, 300 100, 298 74 Z" fill="#dc2626" stroke="#3b0206" stroke-width="1.5"/>
+        <circle cx="298" cy="74" r="5.5" fill="#ffffff" stroke="#3b0206" stroke-width="1.5"/>
+        <circle cx="298" cy="74" r="2.5" fill="#dc2626"/>
       </svg>
     `;
 
@@ -1043,7 +1076,26 @@ export default function UltimateJetPesaCockpit() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
 
-    // Grid
+    // Subtle Spribe Aviator sunburst radial rays from origin (bottom-left)
+    ctx.save();
+    const rayCount = 18;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.012)';
+    const maxDim = Math.max(W, H) * 1.5;
+    for (let r = 0; r < rayCount; r++) {
+      if (r % 2 === 0) {
+        const a1 = (r * (Math.PI / 2)) / rayCount;
+        const a2 = ((r + 1) * (Math.PI / 2)) / rayCount;
+        ctx.beginPath();
+        ctx.moveTo(0, H);
+        ctx.lineTo(Math.cos(a1) * maxDim, H - Math.sin(a1) * maxDim);
+        ctx.lineTo(Math.cos(a2) * maxDim, H - Math.sin(a2) * maxDim);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // Background Grid
     ctx.strokeStyle = 'rgba(255,255,255,0.025)';
     ctx.lineWidth = 1;
     const gridX = W < 500 ? 36 : 50;
@@ -1086,76 +1138,107 @@ export default function UltimateJetPesaCockpit() {
         cy -= exitSwoop * (H * 0.75);
       }
 
-      // Draw the red curved flight trajectory trail (remains visible while plane is on screen)
+      // Draw the red curved flight trajectory trail and signature Spribe solid fill underneath
       if (!isCrashed || timeSinceCrash < 0.9) {
         const controlX = startX + (cx - startX) * 0.45;
         const controlY = baseY - (baseY - cy) * 0.28;
 
+        // Solid-to-gradient crimson red area under curve with vertical right drop
+        ctx.save();
         ctx.beginPath();
         ctx.moveTo(startX, baseY);
         ctx.quadraticCurveTo(controlX, controlY, cx, cy);
-        ctx.strokeStyle = 'rgba(225,29,72,0.98)';
-        ctx.lineWidth = W < 500 ? 4 : 6;
-        ctx.shadowBlur = multiplier >= 10.0 ? 36 : 24;
-        ctx.shadowColor = '#e11d48';
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
         ctx.lineTo(cx, baseY);
-        ctx.lineTo(startX, baseY);
         ctx.closePath();
 
-        const underGradient = ctx.createLinearGradient(startX, cy, startX, baseY);
-        underGradient.addColorStop(0, multiplier >= 10.0 ? 'rgba(225,29,72,0.32)' : 'rgba(225,29,72,0.22)');
-        underGradient.addColorStop(0.5, 'rgba(225,29,72,0.08)');
-        underGradient.addColorStop(1, 'transparent');
+        const underGradient = ctx.createLinearGradient(0, cy, 0, baseY);
+        underGradient.addColorStop(0, 'rgba(225, 29, 72, 0.48)');
+        underGradient.addColorStop(0.65, 'rgba(190, 18, 60, 0.28)');
+        underGradient.addColorStop(1, 'rgba(136, 19, 55, 0.12)');
         ctx.fillStyle = underGradient;
         ctx.fill();
+
+        // Bright neon red flight path line
+        ctx.beginPath();
+        ctx.moveTo(startX, baseY);
+        ctx.quadraticCurveTo(controlX, controlY, cx, cy);
+        ctx.strokeStyle = '#e11d48';
+        ctx.lineWidth = W < 500 ? 3.5 : 5;
+        ctx.lineCap = 'round';
+        ctx.shadowBlur = multiplier >= 10.0 ? 22 : 12;
+        ctx.shadowColor = '#e11d48';
+        ctx.stroke();
+        ctx.restore();
       }
 
       // Render Airplane if inside viewport
       if (cx < W + 100 && cy > -100) {
-        const planeScale = Math.max(0.45, Math.min(W / 700, 1));
-        const planeW = 136 * planeScale;
-        const planeH = 64 * planeScale;
+        const planeScale = Math.max(0.48, Math.min(W / 650, 0.95));
+        const planeW = 150 * planeScale;
+        const planeH = 68 * planeScale;
 
-        // Angle tilts upward with lift, and elevates higher for high multiplier ranges (> 10x)
-        const highRangeTilt = multiplier >= 10.0 ? 0.08 : 0;
-        const planeAngle = -0.32 + Math.min(easeY * 0.35, 0.24) + Math.sin(secondsInAir * 5) * 0.015 - highRangeTilt;
+        // Angle tilts upward with flight climb
+        const planeAngle = -0.22 + Math.min(easeY * 0.2, 0.12) + Math.sin(secondsInAir * 4) * 0.012;
 
-        // Shadow
+        // Soft ground/atmospheric shadow
         ctx.save();
-        ctx.translate(cx + 8 * planeScale, cy + 13 * planeScale);
+        ctx.translate(cx + 6 * planeScale, cy + 10 * planeScale);
         ctx.rotate(planeAngle);
-        ctx.globalAlpha = 0.2;
-        ctx.filter = `blur(${Math.round(11 * planeScale)}px)`;
+        ctx.globalAlpha = 0.25;
+        ctx.filter = `blur(${Math.round(8 * planeScale)}px)`;
         if (planeImageRef.current) ctx.drawImage(planeImageRef.current, -planeW / 2, -planeH / 2, planeW, planeH);
         ctx.restore();
 
-        // Main plane
+        // Main stunt plane
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(planeAngle);
-        ctx.shadowBlur = (multiplier >= 10.0 ? 32 : 20) * planeScale;
-        ctx.shadowColor = multiplier >= 10.0 ? '#fbbf24' : 'rgba(255,255,255,0.32)';
+        ctx.shadowBlur = multiplier >= 10.0 ? 18 * planeScale : 8 * planeScale;
+        ctx.shadowColor = multiplier >= 10.0 ? '#fbbf24' : 'rgba(225, 29, 72, 0.4)';
         if (planeImageRef.current) ctx.drawImage(planeImageRef.current, -planeW / 2, -planeH / 2, planeW, planeH);
+
+        // Animated spinning propeller at the front nose
+        const propCenterRelX = planeW * 0.38;
+        const propCenterRelY = 0;
+        const propRadiusY = planeH * 0.85;
+        const propSpin = (secondsInAir * 42) % (Math.PI * 2);
+
+        // Propeller motion blur disk
+        ctx.beginPath();
+        ctx.ellipse(propCenterRelX, propCenterRelY, 4 * planeScale, propRadiusY * 0.52, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+        ctx.fill();
+
+        // Spinning blades
+        ctx.save();
+        ctx.translate(propCenterRelX, propCenterRelY);
+        ctx.rotate(propSpin);
+        ctx.fillStyle = '#dc2626';
+        ctx.strokeStyle = '#450a0a';
+        ctx.lineWidth = 1;
+        // Upper blade
+        ctx.beginPath();
+        ctx.ellipse(0, -propRadiusY * 0.32, 2.5 * planeScale, propRadiusY * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Lower blade
+        ctx.beginPath();
+        ctx.ellipse(0, propRadiusY * 0.32, 2.5 * planeScale, propRadiusY * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Propeller spinner center cap
+        ctx.beginPath();
+        ctx.arc(0, 0, 4.5 * planeScale, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 0, 2.2 * planeScale, 0, Math.PI * 2);
+        ctx.fillStyle = '#dc2626';
+        ctx.fill();
         ctx.restore();
 
-        // Engine flame / Exhaust particles (grows in count and vibrancy at high multipliers)
-        const particleCount = multiplier >= 10.0 ? 7 : (W < 400 ? 3 : 5);
-        for (let i = 0; i < particleCount; i++) {
-          ctx.beginPath();
-          ctx.arc(
-            cx - (36 + i * 11) * planeScale,
-            cy + Math.sin(secondsInAir * 9 + i) * 4 * planeScale,
-            (2.2 + i * 0.35) * planeScale,
-            0, Math.PI * 2
-          );
-          ctx.fillStyle = multiplier >= 10.0
-            ? (i % 2 === 0 ? 'rgba(251,191,36,0.7)' : 'rgba(239,68,68,0.6)')
-            : (i % 2 === 0 ? 'rgba(255,255,255,0.48)' : 'rgba(239,68,68,0.42)');
-          ctx.fill();
-        }
+        ctx.restore();
       }
     }
   };
@@ -1735,7 +1818,7 @@ export default function UltimateJetPesaCockpit() {
   const renderDeckPanel = (name, deck, setter) => {
     const isQueued = deck.hasBetNext;
     const isFlying = deck.hasBetCurrent;
-    const formattedWager = `${Number(deck.wager || 0).toFixed(2)} KSH`;
+    const formattedWager = `${Number(deck.wager || 0).toFixed(2)} KES`;
 
     return (
       <div key={name} className="jp-deck-panel">
@@ -1809,16 +1892,16 @@ export default function UltimateJetPesaCockpit() {
               </button>
             </div>
 
-            {/* 2x2 Quick Stake Grid: 50, 500, 1000, 10000 */}
+            {/* 2x2 Quick Stake Grid: 100, 250, 1000, 25000 (Spribe Aviator Standard) */}
             <div className="jp-quick-grid-2x2">
-              {[50, 500, 1000, 10000].map((v) => (
+              {[100, 250, 1000, 25000].map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setter((p) => ({ ...p, wager: v }))}
                   className={`jp-quick-grid-btn ${deck.wager === v ? 'active' : ''}`}
                 >
-                  {v}
+                  {v.toLocaleString()}
                 </button>
               ))}
             </div>
@@ -1843,11 +1926,11 @@ export default function UltimateJetPesaCockpit() {
                 {isQueued ? (
                   <>
                     <span className="jp-action-label">CANCEL</span>
-                    <span className="jp-action-sub">Queued</span>
+                    <span className="jp-action-sub">Waiting for next round</span>
                   </>
                 ) : (
                   <>
-                    <span className="jp-action-label">BET</span>
+                    <span className="jp-action-label">Bet</span>
                     <span className="jp-action-sub">{formattedWager}</span>
                   </>
                 )}
@@ -2995,7 +3078,7 @@ export default function UltimateJetPesaCockpit() {
           color: #60a5fa;
         }
 
-        /* Right Column: Big prominent amber BET button */
+        /* Right Column: Spribe Aviator Action Buttons */
         .jp-deck-right-col {
           display: flex;
           width: 100%;
@@ -3013,38 +3096,61 @@ export default function UltimateJetPesaCockpit() {
           align-items: center;
           justify-content: center;
           gap: 2px;
-          transition: filter 0.15s, transform 0.05s;
+          transition: filter 0.15s ease, transform 0.05s ease, background 0.2s ease;
           box-sizing: border-box;
         }
+
+        /* 1. Prestake / Ready State (Classic Spribe Vibrant Green) */
         .jp-action-btn.jp-bet-mode {
-          background: #e59344;
-          color: #160f06;
-          box-shadow: 0 4px 14px rgba(229, 147, 68, 0.35);
+          background: #28a745;
+          background: linear-gradient(180deg, #2eb85c 0%, #218838 100%);
+          color: #ffffff;
+          box-shadow: 0 4px 14px rgba(40, 167, 69, 0.45);
         }
         .jp-action-btn.jp-bet-mode:hover {
-          filter: brightness(1.06);
+          filter: brightness(1.08);
+          box-shadow: 0 6px 18px rgba(40, 167, 69, 0.55);
         }
         .jp-action-btn.jp-bet-mode:active {
           transform: scale(0.98);
         }
+
+        /* 2. Queued / Cancel State (Spribe Cancel Red) */
         .jp-action-btn.jp-bet-mode.queued {
-          background: #475569 !important;
+          background: #dc3545 !important;
+          background: linear-gradient(180deg, #e02f44 0%, #c82333 100%) !important;
           color: #ffffff !important;
-          box-shadow: none !important;
+          box-shadow: 0 4px 14px rgba(220, 53, 69, 0.45) !important;
         }
+        .jp-action-btn.jp-bet-mode.queued:hover {
+          filter: brightness(1.08) !important;
+        }
+
+        /* 3. Auto Bet Active State */
         .jp-action-btn.jp-bet-mode.auto-active {
-          background: #e59344;
-          color: #160f06;
+          background: #28a745;
+          background: linear-gradient(180deg, #2eb85c 0%, #218838 100%);
+          color: #ffffff;
         }
+
+        /* 4. In-Flight Cash Out State (Spribe Amber / Orange) */
         .jp-action-btn.jp-cashout-mode {
-          background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+          background: #f59e0b !important;
+          background: linear-gradient(180deg, #ff9f43 0%, #d97706 100%) !important;
           color: #ffffff !important;
-          box-shadow: 0 4px 16px rgba(245, 158, 11, 0.45) !important;
+          box-shadow: 0 4px 16px rgba(245, 158, 11, 0.5) !important;
         }
+        .jp-action-btn.jp-cashout-mode:hover {
+          filter: brightness(1.08) !important;
+        }
+        .jp-action-btn.jp-cashout-mode:active {
+          transform: scale(0.98);
+        }
+
         .jp-action-label {
-          font-size: 18px;
+          font-size: 19px;
           font-weight: 900;
-          letter-spacing: 0.03em;
+          letter-spacing: 0.02em;
           line-height: 1.1;
         }
         .jp-action-sub {
