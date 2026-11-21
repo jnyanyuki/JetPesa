@@ -32,14 +32,16 @@ export async function GET(request) {
     // Preload any persistent overrides from PostgreSQL
     try {
       const dbOverrides = await sql.query(`
-        SELECT round_id, crash_point, target_profit_kes FROM public.round_overrides
+        SELECT round_id, crash_point, target_profit_percent, target_profit_kes FROM public.round_overrides
       `);
       for (const row of dbOverrides) {
         if (row.crash_point !== null && row.crash_point !== undefined) {
           setMemoryOverride(row.round_id, Number(row.crash_point));
         }
-        if (row.target_profit_kes !== null && row.target_profit_kes !== undefined) {
-          setRoundProfitTarget(row.round_id, Number(row.target_profit_kes));
+        if (row.target_profit_percent !== null && row.target_profit_percent !== undefined) {
+          setRoundProfitTarget(row.round_id, Number(row.target_profit_percent));
+        } else if (row.target_profit_kes !== null && row.target_profit_kes !== undefined) {
+          setRoundProfitTarget(row.round_id, 50);
         }
       }
     } catch (e) {
@@ -155,6 +157,7 @@ export async function GET(request) {
       try {
         const profitTargetEval = await evaluateAndEnforceProfitTarget(data.currentCycleIndex);
         inFlightStats.profitTarget = {
+          targetProfitPercent: profitTargetEval.targetProfitPercent,
           targetProfitKes: profitTargetEval.targetProfitKes,
           safeMultiplierCap: profitTargetEval.safeMultiplierCap,
           willOverride: profitTargetEval.willOverride,
@@ -294,26 +297,27 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { cycleIndex, crashPoint, note, instantCrash, action, targetProfitKes } = body;
+    const { cycleIndex, crashPoint, note, instantCrash, action, targetProfitPercent, targetProfitKes } = body;
 
     if (!cycleIndex) {
       return NextResponse.json({ success: false, message: 'cycleIndex is required.' }, { status: 400 });
     }
 
     const roundId = String(cycleIndex);
+    const targetVal = targetProfitPercent !== undefined ? targetProfitPercent : targetProfitKes;
 
-    // 1. Profit Target configuration
-    if (action === 'setProfitTarget' || (targetProfitKes !== undefined && targetProfitKes !== null && action !== 'clearProfitTarget')) {
-      const result = await setRoundProfitTargetDb(roundId, targetProfitKes);
+    // 1. Percentage Profit Target configuration
+    if (action === 'setProfitTarget' || (targetVal !== undefined && targetVal !== null && action !== 'clearProfitTarget')) {
+      const result = await setRoundProfitTargetDb(roundId, targetVal);
       return NextResponse.json({
         success: true,
-        message: `House profit target of KES ${Number(targetProfitKes).toLocaleString()} configured for Round #${roundId}. ${result.reason}`,
+        message: `House profit target of ${result.targetProfitPercent}% of total wagers locked for Round #${roundId}. ${result.reason}`,
         roundId,
         ...result,
       });
     }
 
-    if (action === 'clearProfitTarget' || targetProfitKes === null) {
+    if (action === 'clearProfitTarget' || targetVal === null) {
       const result = await clearRoundProfitTargetDb(roundId);
       return NextResponse.json({
         success: true,

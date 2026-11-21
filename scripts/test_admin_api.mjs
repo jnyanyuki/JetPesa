@@ -15,7 +15,7 @@ async function testAdminApi() {
 
   const curCycle = dataGet.currentCycleIndex;
 
-  console.log(`Setting profit target KES 500 on round ${curCycle}...`);
+  console.log(`Setting percentage profit target 60% on round ${curCycle}...`);
   const resSet = await fetch(`${baseUrl}/api/admin/rounds`, {
     method: 'POST',
     headers: {
@@ -25,13 +25,13 @@ async function testAdminApi() {
     body: JSON.stringify({
       cycleIndex: curCycle,
       action: 'setProfitTarget',
-      targetProfitKes: 500,
+      targetProfitPercent: 60,
     }),
   });
   const dataSet = await resSet.json();
   console.log('SET response:', dataSet);
 
-  if (!dataSet.success || dataSet.targetProfitKes !== 500) {
+  if (!dataSet.success || dataSet.targetProfitPercent !== 60) {
     throw new Error('POST setProfitTarget failed: ' + JSON.stringify(dataSet));
   }
 
@@ -54,7 +54,7 @@ async function testAdminApi() {
     throw new Error('POST clearProfitTarget failed: ' + JSON.stringify(dataClear));
   }
 
-  console.log('API end-to-end integration test PASSED!');
+  console.log('API end-to-end integration test with percentage profit target PASSED!');
 }
 
 testAdminApi().catch(e => {
