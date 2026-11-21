@@ -6,6 +6,7 @@ import { authClient } from '../../lib/auth/client';
 import confetti from 'canvas-confetti';
 import { generateDynamicLobbyChat } from '../../lib/chatEngine';
 import { getRandomPlayerPersona, getPersonaBySeed } from '../../lib/playerSeeds';
+import { SPRIBE_PLANE_DATA_URL } from '../../lib/planeAsset';
 
 const MIN_WAGER = 10;
 const HISTORY_STORAGE_KEY = 'jetpesa_real_previous_rounds';
@@ -306,71 +307,11 @@ export default function UltimateJetPesaCockpit() {
   });
 
   useEffect(() => {
-    const svgPlane = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 150">
-        <defs>
-          <linearGradient id="planeBodyRed" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#ff334b"/>
-            <stop offset="45%" stop-color="#e51c24"/>
-            <stop offset="100%" stop-color="#990b1c"/>
-          </linearGradient>
-          <linearGradient id="planeWingShadow" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#c41024"/>
-            <stop offset="100%" stop-color="#69040e"/>
-          </linearGradient>
-        </defs>
-
-        <!-- Tail fin / Rudder -->
-        <path d="M 24 24 C 36 20, 56 38, 74 68 L 68 80 L 28 78 Z" fill="url(#planeBodyRed)" stroke="#450308" stroke-width="2.5" stroke-linejoin="round"/>
-        <!-- Horizontal stabilizer -->
-        <path d="M 18 76 L 52 76 L 46 84 L 16 82 Z" fill="#8f0817" stroke="#450308" stroke-width="2"/>
-
-        <!-- Left Main Wing (swept stunt wing) -->
-        <path d="M 180 82 L 132 130 C 128 134, 140 136, 150 133 L 238 88 Z" fill="url(#planeWingShadow)" stroke="#450308" stroke-width="2.5" stroke-linejoin="round"/>
-        <!-- Wing leading edge accent -->
-        <path d="M 235 89 L 148 133" stroke="#ff6b7e" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
-
-        <!-- Fuselage Body -->
-        <path d="M 28 78 C 60 76, 98 66, 142 60 C 172 55, 215 55, 258 60 C 275 62, 288 66, 292 72 C 296 78, 292 84, 282 88 C 260 93, 225 93, 172 92 C 120 91, 62 85, 28 78 Z" fill="url(#planeBodyRed)" stroke="#450308" stroke-width="2.5" stroke-linejoin="round"/>
-
-        <!-- Top ridge highlight -->
-        <path d="M 72 68 C 118 61, 180 57, 268 62" fill="none" stroke="#ff8596" stroke-width="2" stroke-linecap="round" opacity="0.65"/>
-
-        <!-- Cockpit canopy -->
-        <path d="M 172 58 C 182 43, 210 43, 224 58 Z" fill="#0b0f19" stroke="#450308" stroke-width="2"/>
-        <path d="M 178 56 C 185 47, 203 47, 216 56 Z" fill="#38bdf8" opacity="0.45"/>
-        <circle cx="196" cy="51" r="5" fill="#f8fafc"/>
-
-        <!-- Stylized white 'X' on fuselage (official Aviator insignia) -->
-        <g stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" opacity="0.95">
-          <line x1="130" y1="67" x2="152" y2="84"/>
-          <line x1="152" y1="67" x2="130" y2="84"/>
-        </g>
-
-        <!-- Engine Cowl band -->
-        <path d="M 278 62 C 288 65, 291 81, 280 89" fill="none" stroke="#ff6b7e" stroke-width="2" opacity="0.5"/>
-
-        <!-- Landing gear -->
-        <line x1="218" y1="92" x2="225" y2="116" stroke="#1f2937" stroke-width="3.5" stroke-linecap="round"/>
-        <ellipse cx="227" cy="120" rx="7" ry="10" fill="#0f172a" stroke="#334155" stroke-width="2"/>
-        <circle cx="227" cy="120" r="3" fill="#94a3b8"/>
-
-        <!-- Nose spinner hub -->
-        <ellipse cx="293" cy="74" rx="7.5" ry="12" fill="#ba0c1e" stroke="#450308" stroke-width="2"/>
-
-        <!-- Propeller blur disc -->
-        <ellipse cx="298" cy="74" rx="9" ry="62" fill="rgba(255,255,255,0.22)"/>
-
-        <!-- Propeller blades -->
-        <path d="M 295 74 C 293 48, 296 26, 299 12 C 302 26, 300 48, 298 74 Z" fill="#dc2626" stroke="#3b0206" stroke-width="1.5"/>
-        <path d="M 295 74 C 293 100, 296 122, 299 136 C 302 122, 300 100, 298 74 Z" fill="#dc2626" stroke="#3b0206" stroke-width="1.5"/>
-        <circle cx="298" cy="74" r="5.5" fill="#ffffff" stroke="#3b0206" stroke-width="1.5"/>
-        <circle cx="298" cy="74" r="2.5" fill="#dc2626"/>
-      </svg>
-    `;
-
     const img = new Image();
-    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgPlane);
+    img.onload = () => {
+      planeImageRef.current = img;
+    };
+    img.src = SPRIBE_PLANE_DATA_URL || '/spribe_plane.png';
     planeImageRef.current = img;
   }, []);
 
@@ -1138,20 +1079,35 @@ export default function UltimateJetPesaCockpit() {
         cy -= exitSwoop * (H * 0.75);
       }
 
+      // Authentic Spribe Aviator stunt plane sizing and climbing angle
+      const planeScale = Math.max(0.48, Math.min(W / 650, 0.95));
+      const planeW = 148 * planeScale;
+      const planeH = planeW * (101 / 201);
+      const planeAngle = -0.22 + Math.min(easeY * 0.2, 0.12) + Math.sin(secondsInAir * 4) * 0.012;
+
+      // Attachment point on rear bottom runner:
+      // Local runner tip offset from plane center: relX = -planeW * 0.49, relY = planeH * 0.44
+      const runnerRelX = -planeW * 0.49;
+      const runnerRelY = planeH * 0.44;
+      const cosA = Math.cos(planeAngle);
+      const sinA = Math.sin(planeAngle);
+      const connectX = cx + cosA * runnerRelX - sinA * runnerRelY;
+      const connectY = cy + sinA * runnerRelX + cosA * runnerRelY;
+
       // Draw the red curved flight trajectory trail and signature Spribe solid fill underneath
       if (!isCrashed || timeSinceCrash < 0.9) {
-        const controlX = startX + (cx - startX) * 0.45;
-        const controlY = baseY - (baseY - cy) * 0.28;
+        const controlX = startX + (connectX - startX) * 0.45;
+        const controlY = baseY - (baseY - connectY) * 0.28;
 
         // Solid-to-gradient crimson red area under curve with vertical right drop
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(startX, baseY);
-        ctx.quadraticCurveTo(controlX, controlY, cx, cy);
-        ctx.lineTo(cx, baseY);
+        ctx.quadraticCurveTo(controlX, controlY, connectX, connectY);
+        ctx.lineTo(connectX, baseY);
         ctx.closePath();
 
-        const underGradient = ctx.createLinearGradient(0, cy, 0, baseY);
+        const underGradient = ctx.createLinearGradient(0, connectY, 0, baseY);
         underGradient.addColorStop(0, 'rgba(225, 29, 72, 0.48)');
         underGradient.addColorStop(0.65, 'rgba(190, 18, 60, 0.28)');
         underGradient.addColorStop(1, 'rgba(136, 19, 55, 0.12)');
@@ -1161,7 +1117,7 @@ export default function UltimateJetPesaCockpit() {
         // Bright neon red flight path line
         ctx.beginPath();
         ctx.moveTo(startX, baseY);
-        ctx.quadraticCurveTo(controlX, controlY, cx, cy);
+        ctx.quadraticCurveTo(controlX, controlY, connectX, connectY);
         ctx.strokeStyle = '#e11d48';
         ctx.lineWidth = W < 500 ? 3.5 : 5;
         ctx.lineCap = 'round';
@@ -1171,15 +1127,8 @@ export default function UltimateJetPesaCockpit() {
         ctx.restore();
       }
 
-      // Render Airplane if inside viewport
+      // Render Official Spribe Airplane if inside viewport
       if (cx < W + 100 && cy > -100) {
-        const planeScale = Math.max(0.48, Math.min(W / 650, 0.95));
-        const planeW = 150 * planeScale;
-        const planeH = 68 * planeScale;
-
-        // Angle tilts upward with flight climb
-        const planeAngle = -0.22 + Math.min(easeY * 0.2, 0.12) + Math.sin(secondsInAir * 4) * 0.012;
-
         // Soft ground/atmospheric shadow
         ctx.save();
         ctx.translate(cx + 6 * planeScale, cy + 10 * planeScale);
@@ -1197,46 +1146,15 @@ export default function UltimateJetPesaCockpit() {
         ctx.shadowColor = multiplier >= 10.0 ? '#fbbf24' : 'rgba(225, 29, 72, 0.4)';
         if (planeImageRef.current) ctx.drawImage(planeImageRef.current, -planeW / 2, -planeH / 2, planeW, planeH);
 
-        // Animated spinning propeller at the front nose
-        const propCenterRelX = planeW * 0.38;
+        // Subtle realistic propeller spin motion blur disk at front nose hub
+        const propCenterRelX = planeW * 0.485;
         const propCenterRelY = 0;
-        const propRadiusY = planeH * 0.85;
-        const propSpin = (secondsInAir * 42) % (Math.PI * 2);
+        const propRadiusY = planeH * 0.48;
 
-        // Propeller motion blur disk
         ctx.beginPath();
-        ctx.ellipse(propCenterRelX, propCenterRelY, 4 * planeScale, propRadiusY * 0.52, 0, 0, Math.PI * 2);
+        ctx.ellipse(propCenterRelX, propCenterRelY, 3.5 * planeScale, propRadiusY, 0, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
         ctx.fill();
-
-        // Spinning blades
-        ctx.save();
-        ctx.translate(propCenterRelX, propCenterRelY);
-        ctx.rotate(propSpin);
-        ctx.fillStyle = '#dc2626';
-        ctx.strokeStyle = '#450a0a';
-        ctx.lineWidth = 1;
-        // Upper blade
-        ctx.beginPath();
-        ctx.ellipse(0, -propRadiusY * 0.32, 2.5 * planeScale, propRadiusY * 0.3, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        // Lower blade
-        ctx.beginPath();
-        ctx.ellipse(0, propRadiusY * 0.32, 2.5 * planeScale, propRadiusY * 0.3, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        // Propeller spinner center cap
-        ctx.beginPath();
-        ctx.arc(0, 0, 4.5 * planeScale, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(0, 0, 2.2 * planeScale, 0, Math.PI * 2);
-        ctx.fillStyle = '#dc2626';
-        ctx.fill();
-        ctx.restore();
 
         ctx.restore();
       }
