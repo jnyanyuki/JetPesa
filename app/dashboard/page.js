@@ -1589,9 +1589,10 @@ export default function UltimateJetPesaCockpit() {
   const renderLiveBets = () => (
     <div className="jp-panel-scroll">
       <div className="jp-live-table-head">
-        <span>Pilot ({liveBetsFeed.length.toLocaleString()})</span>
-        <span>Stake</span>
-        <span>Status</span>
+        <span className="jp-col-player">Player</span>
+        <span className="jp-col-bet">Bet KES</span>
+        <span className="jp-col-mult">X</span>
+        <span className="jp-col-win">Win KES</span>
       </div>
       {liveBetsFeed.length === 0 ? (
         <div className="jp-empty-state">
@@ -1601,36 +1602,32 @@ export default function UltimateJetPesaCockpit() {
         </div>
       ) : (
         <>
-          {liveBetsFeed.map((b) => (
-            <div key={b.id} className={`jp-live-row ${b.status === 'cashed' ? 'jp-live-row-won' : ''}`}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                <UserAvatar seed={b.seed} size={26} />
-                <div style={{ minWidth: 0 }}>
-                  <span className="jp-live-user">{b.username}</span>
-                  <span className="jp-live-sub">Round #{currentRoundRef.current.nonce}</span>
+          {liveBetsFeed.map((b) => {
+            const isWon = b.status === 'cashed';
+            const winAmount = b.payout || Math.floor(b.bet * b.mult);
+            const multVal = Number(b.mult || 1);
+            const multColor = multVal >= 10.0 ? '#fbbf24' : multVal >= 2.0 ? '#c084fc' : '#38bdf8';
+
+            return (
+              <div key={b.id} className={`jp-live-row ${isWon ? 'jp-live-row-won' : ''}`}>
+                <div className="jp-live-player-cell">
+                  <UserAvatar seed={b.seed} size={24} />
+                  <span className="jp-live-user" title={b.username}>{b.username}</span>
+                </div>
+                <div className="jp-live-bet-cell">
+                  {Number(b.bet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="jp-live-mult-cell" style={{ color: isWon ? multColor : 'transparent' }}>
+                  {isWon ? `${multVal.toFixed(2)}x` : ''}
+                </div>
+                <div className="jp-live-win-cell">
+                  {isWon
+                    ? Number(winAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : ''}
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <span className={`jp-live-stake ${b.status === 'cashed' ? 'jp-stake-won' : ''}`}>
-                  {b.status === 'cashed' ? `${(b.payout || Math.floor(b.bet * b.mult)).toLocaleString()} KES` : `${b.bet.toLocaleString()} KES`}
-                </span>
-                {b.status === 'cashed' && (
-                  <span style={{ fontSize: '9px', color: '#64748b', display: 'block', fontWeight: '700' }}>
-                    {b.bet.toLocaleString()} KES
-                  </span>
-                )}
-              </div>
-              {b.status === 'cashed' ? (
-                <span className="jp-badge jp-badge-win">{b.mult.toFixed(2)}x</span>
-              ) : b.status === 'lost' ? (
-                <span className="jp-badge jp-badge-lost">Lost</span>
-              ) : b.status === 'flying' ? (
-                <span className="jp-badge jp-badge-flying">Flying</span>
-              ) : (
-                <span className="jp-badge jp-badge-queue">Queued</span>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </>
       )}
     </div>
@@ -2608,34 +2605,76 @@ export default function UltimateJetPesaCockpit() {
           50% { opacity: 0.45; transform: scale(0.85); }
         }
 
-        /* === LIVE BETS === */
+        /* === LIVE BETS (Official Spribe Aviator 4-Column Layout: Player | Bet KES | X | Win KES) === */
         .jp-live-table-head {
-          display: grid; grid-template-columns: 1fr 64px 64px; gap: 6px;
-          color: #64748b; font-size: 9px; font-weight: 900; text-transform: uppercase; padding: 4px 6px 6px;
+          display: grid;
+          grid-template-columns: minmax(85px, 1.35fr) minmax(70px, 1fr) minmax(46px, 0.7fr) minmax(75px, 1fr);
+          gap: 6px;
+          color: #8e9ba8;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 6px 14px 6px;
         }
+        .jp-col-player { text-align: left; }
+        .jp-col-bet { text-align: right; }
+        .jp-col-mult { text-align: right; }
+        .jp-col-win { text-align: right; }
+
         .jp-live-row {
-          display: grid; grid-template-columns: 1fr 64px 64px; gap: 6px; align-items: center;
-          padding: 7px 8px; background: rgba(15,23,42,0.85); border: 1px solid rgba(255,255,255,0.05);
-          border-radius: 10px; font-size: 11px; margin-bottom: 5px;
-          transition: background 0.2s ease, border-color 0.2s ease;
-          content-visibility: auto; contain-intrinsic-size: 38px;
+          display: grid;
+          grid-template-columns: minmax(85px, 1.35fr) minmax(70px, 1fr) minmax(46px, 0.7fr) minmax(75px, 1fr);
+          gap: 6px;
+          align-items: center;
+          padding: 4px 12px;
+          background: #111215;
+          border: 1px solid rgba(255, 255, 255, 0.035);
+          border-radius: 999px;
+          font-size: 11.5px;
+          margin-bottom: 4px;
+          transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+          content-visibility: auto;
+          contain-intrinsic-size: 34px;
         }
         .jp-live-row-won {
-          background: rgba(34, 197, 94, 0.08) !important;
-          border-color: rgba(34, 197, 94, 0.28) !important;
+          background: #193114 !important;
+          border-color: rgba(74, 222, 128, 0.32) !important;
+          box-shadow: inset 0 0 10px rgba(34, 197, 94, 0.08);
         }
-        .jp-stake-won {
-          color: #4ade80 !important;
-          font-weight: 950;
+        .jp-live-player-cell {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          min-width: 0;
         }
-        .jp-live-user { display: block; color: #e2e8f0; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
-        .jp-live-sub { display: block; color: #475569; font-size: 8px; font-weight: 800; margin-top: 1px; }
-        .jp-live-stake { color: #fff; font-weight: 900; text-align: right; font-size: 11px; }
-        .jp-badge { border-radius: 999px; padding: 3px 6px; font-size: 10px; font-weight: 950; text-align: center; }
-        .jp-badge-win { color: #22c55e; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); }
-        .jp-badge-lost { color: #ef4444; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); }
-        .jp-badge-flying { color: #38bdf8; background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.2); }
-        .jp-badge-queue { color: #94a3b8; background: rgba(148,163,184,0.1); border: 1px solid rgba(148,163,184,0.15); }
+        .jp-live-user {
+          display: block;
+          color: #f1f5f9;
+          font-weight: 700;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-size: 11.5px;
+        }
+        .jp-live-bet-cell {
+          text-align: right;
+          color: #cbd5e1;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+          font-size: 11.5px;
+        }
+        .jp-live-mult-cell {
+          text-align: right;
+          font-weight: 800;
+          font-variant-numeric: tabular-nums;
+          font-size: 11.5px;
+        }
+        .jp-live-win-cell {
+          text-align: right;
+          color: #f8fafc;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+          font-size: 11.5px;
+        }
         .jp-empty-state { height: 70%; display: flex; align-items: center; justify-content: center; flex-direction: column; color: #64748b; font-size: 12px; gap: 6px; text-align: center; }
 
         /* === MY BETS HISTORY === */
@@ -3286,6 +3325,9 @@ export default function UltimateJetPesaCockpit() {
           .jp-idle-text { font-size: 11px !important; }
           .jp-profile-label, .jp-rain-label, .jp-fair-label { display: none; }
           .jp-fair-btn { padding: 4px 6px !important; }
+          .jp-live-table-head { padding: 4px 8px !important; font-size: 10px !important; }
+          .jp-live-row { padding: 3px 8px !important; font-size: 10.5px !important; }
+          .jp-live-user, .jp-live-bet-cell, .jp-live-mult-cell, .jp-live-win-cell { font-size: 10.5px !important; }
         }
 
         /* === RESPONSIVE: TINY PHONES (<380px) === */
