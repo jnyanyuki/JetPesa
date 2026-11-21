@@ -1,16 +1,26 @@
 import { NextResponse } from 'next/server';
 import { sql } from '../../../../../lib/db';
 import { getAuthSession } from '../../../../../lib/auth/server';
-import { getPenaltyMultiplier } from '../../../../../lib/games/penaltyEngine';
+import {
+  getPenaltySettings,
+  getPenaltyMultiplier,
+} from '../../../../../lib/games/penaltyEngine';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
   try {
+    const settings = await getPenaltySettings();
     const session = await getAuthSession(request);
+
     if (!session?.user?.id) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({
+        success: true,
+        active: false,
+        settings,
+      });
     }
+
     const userId = session.user.id;
 
     const rows = await sql.query(`
@@ -31,19 +41,24 @@ export async function GET(request) {
     `, [userId]);
 
     if (rows.length === 0) {
-      return NextResponse.json({ success: true, active: false });
+      return NextResponse.json({
+        success: true,
+        active: false,
+        settings,
+      });
     }
 
     const round = rows[0];
     const stake = Number(round.stake);
     const currentStreak = Number(round.current_streak);
     const currentMultiplier = Number(round.current_multiplier);
-    const nextMultiplier = getPenaltyMultiplier(currentStreak + 1);
+    const nextMultiplier = getPenaltyMultiplier(currentStreak + 1, settings.multipliers);
     const currentPayout = Math.floor(stake * currentMultiplier * 100) / 100;
 
     return NextResponse.json({
       success: true,
       active: true,
+      settings,
       round: {
         id: round.id,
         stake,

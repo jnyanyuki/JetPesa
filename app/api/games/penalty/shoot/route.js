@@ -3,7 +3,7 @@ import { withTransaction } from '../../../../../lib/db';
 import { getAuthSession } from '../../../../../lib/auth/server';
 import {
   PENALTY_SPOTS,
-  MAX_SHOTS,
+  getPenaltySettings,
   getPenaltyMultiplier,
   resolvePenaltyKick,
 } from '../../../../../lib/games/penaltyEngine';
@@ -33,6 +33,9 @@ export async function POST(request) {
       );
     }
 
+    const settings = await getPenaltySettings();
+    const maxShots = settings.maxShots;
+
     const result = await withTransaction(async (client) => {
       // 1. Fetch active round
       const roundRes = await client.query(`
@@ -59,7 +62,7 @@ export async function POST(request) {
       const currentStreak = Number(round.current_streak);
       const shotIndex = currentStreak + 1;
 
-      if (shotIndex > MAX_SHOTS) {
+      if (shotIndex > maxShots) {
         return {
           error: true,
           status: 400,
@@ -68,13 +71,14 @@ export async function POST(request) {
         };
       }
 
-      // 2. Resolve kick with Provably Fair engine
+      // 2. Resolve kick with Provably Fair engine using active settings
       const kickOutcome = resolvePenaltyKick(
         round.server_seed,
         round.client_seed,
         round.nonce,
         shotIndex,
-        spot
+        spot,
+        settings
       );
 
       const isGoal = kickOutcome.isGoal;
@@ -129,10 +133,10 @@ export async function POST(request) {
         multiplier: newMultiplier,
       });
 
-      const isSeriesCleared = newStreak >= MAX_SHOTS;
+      const isSeriesCleared = newStreak >= maxShots;
 
       if (isSeriesCleared) {
-        // Grand Final Goal (5/5) -> Automatic Cashout 30.72x
+        // Grand Final Goal (Clean Sweep) -> Automatic Cashout
         const finalPayout = Math.floor(stake * newMultiplier * 100) / 100;
 
         const creditRes = await client.query(`
@@ -178,11 +182,11 @@ export async function POST(request) {
           clientSeed: round.client_seed,
           nonce: round.nonce,
           newBalance,
-          message: `GOOOOOAAAL! FULL 5/5 CLEAN SWEEP! Won KES ${finalPayout.toLocaleString()} at ${newMultiplier}x!`,
+          message: `GOOOOOAAAL! FULL ${newStreak}/${maxShots} CLEAN SWEEP! Won KES ${finalPayout.toLocaleString()} at ${newMultiplier}x!`,
         };
       }
 
-      // Mid-series Goal (1 to 4) -> Can shoot again or cash out
+      // Mid-series Goal -> Can shoot again or cash out
       await client.query(`
         UPDATE public.penalty_rounds
         SET 
@@ -194,7 +198,7 @@ export async function POST(request) {
       `, [newStreak, newMultiplier, JSON.stringify(shotsHistory), roundId]);
 
       const currentPayout = Math.floor(stake * newMultiplier * 100) / 100;
-      const nextMultiplier = getPenaltyMultiplier(newStreak + 1);
+      const nextMultiplier = getPenaltyMultiplier(newStreak + 1, settings.multipliers);
 
       return {
         success: true,
@@ -209,7 +213,7 @@ export async function POST(request) {
         currentPayout,
         status: 'ACTIVE',
         shotsHistory,
-        message: `GOAL! Shot ${newStreak}/5 scored! Current value: KES ${currentPayout.toLocaleString()} (${newMultiplier}x).`,
+        message: `GOAL! Shot ${newStreak}/${maxShots} scored! Current value: KES ${currentPayout.toLocaleString()} (${newMultiplier}x).`,
       };
     });
 

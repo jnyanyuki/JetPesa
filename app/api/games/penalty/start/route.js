@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { withTransaction } from '../../../../../lib/db';
 import { getAuthSession } from '../../../../../lib/auth/server';
 import {
+  getPenaltySettings,
   generatePenaltyKeyPair,
   getPenaltyMultiplier,
 } from '../../../../../lib/games/penaltyEngine';
@@ -23,16 +24,28 @@ export async function POST(request) {
       return NextResponse.json({ success: false, code: 'INVALID_JSON', message: 'Malformed JSON payload.' }, { status: 400 });
     }
 
+    const settings = await getPenaltySettings();
     const wager = Math.floor(Number(body.wager || body.stake));
-    if (!wager || wager < 10) {
-      return NextResponse.json({ success: false, code: 'MIN_WAGER', message: 'Minimum wager is KES 10.' }, { status: 400 });
+
+    if (!wager || wager < settings.minBet) {
+      return NextResponse.json(
+        { success: false, code: 'MIN_WAGER', message: `Minimum wager is KES ${settings.minBet}.` },
+        { status: 400 }
+      );
+    }
+
+    if (wager > settings.maxBet) {
+      return NextResponse.json(
+        { success: false, code: 'MAX_WAGER', message: `Maximum wager is KES ${settings.maxBet.toLocaleString()}.` },
+        { status: 400 }
+      );
     }
 
     const roundId = `PENALTY-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const betId = `BET-${roundId}-${userId}`;
     const { serverSeed, serverSeedHash, clientSeed } = generatePenaltyKeyPair();
     const nonce = 1;
-    const nextMultiplier = getPenaltyMultiplier(1);
+    const nextMultiplier = getPenaltyMultiplier(1, settings.multipliers);
 
     const result = await withTransaction(async (client) => {
       // 1. Check if user already has an active Penalty game
@@ -99,6 +112,8 @@ export async function POST(request) {
         currentStreak: 0,
         currentMultiplier: 1.00,
         nextMultiplier,
+        maxShots: settings.maxShots,
+        multipliers: settings.multipliers,
         serverSeedHash,
         newBalance: updatedBalance,
         message: 'Shootout started! Pick a target to take your penalty kick.',

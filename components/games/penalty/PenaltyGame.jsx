@@ -5,8 +5,7 @@ import confetti from 'canvas-confetti';
 import {
   PENALTY_SPOTS,
   SPOT_LABELS,
-  PENALTY_MULTIPLIERS,
-  MAX_SHOTS,
+  DEFAULT_PENALTY_SETTINGS,
   getPenaltyMultiplier,
 } from '../../../lib/games/penaltyEngine';
 
@@ -21,7 +20,6 @@ function playAudioFX(type) {
     const ctx = new AudioContext();
 
     if (type === 'kick') {
-      // Deep bass kick thud + turf scuff
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
@@ -34,7 +32,6 @@ function playAudioFX(type) {
       osc.start();
       osc.stop(ctx.currentTime + 0.15);
     } else if (type === 'goal') {
-      // Crowd cheer & triumphant chord
       [392.0, 523.25, 659.25, 783.99].forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -48,7 +45,6 @@ function playAudioFX(type) {
         osc.stop(ctx.currentTime + idx * 0.05 + 0.4);
       });
     } else if (type === 'whistle') {
-      // Referee whistle double burst
       [0, 0.12].forEach((delay) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -62,7 +58,6 @@ function playAudioFX(type) {
         osc.stop(ctx.currentTime + delay + 0.09);
       });
     } else if (type === 'save') {
-      // Glove slap & dull thud
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'square';
@@ -75,7 +70,6 @@ function playAudioFX(type) {
       osc.start();
       osc.stop(ctx.currentTime + 0.2);
     } else if (type === 'cashout') {
-      // Coin cascade fanfare
       [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((freq, i) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -112,7 +106,8 @@ export default function PenaltyGame({
   onOpenDeposit = () => {},
   onOpenProvably = () => {},
 }) {
-  // Config & Betting
+  // Config & Betting (Dynamic settings from platform)
+  const [penaltySettings, setPenaltySettings] = useState(DEFAULT_PENALTY_SETTINGS);
   const [stake, setStake] = useState(50);
   const [isStarting, setIsStarting] = useState(false);
   const [isShooting, setIsShooting] = useState(false);
@@ -121,20 +116,20 @@ export default function PenaltyGame({
   // Active Shootout State
   const [roundId, setRoundId] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentStreak, setCurrentStreak] = useState(0); // 0 to 5
+  const [currentStreak, setCurrentStreak] = useState(0);
   const [currentMultiplier, setCurrentMultiplier] = useState(1.0);
-  const [shotsHistory, setShotsHistory] = useState([]); // [{ shot, spot, keeperDive, result, multiplier }]
+  const [shotsHistory, setShotsHistory] = useState([]);
   const [serverSeedHash, setServerSeedHash] = useState('');
   const [serverSeed, setServerSeed] = useState('');
-  const [gameResult, setGameResult] = useState(null); // 'WON', 'SAVED', null
+  const [gameResult, setGameResult] = useState(null);
 
   // Animation & Visual State
-  const [selectedSpot, setSelectedSpot] = useState(null); // hovered or currently targeted spot
-  const [animatingKick, setAnimatingKick] = useState(null); // { spot, keeperDive, isGoal }
-  const [goalBannerText, setGoalBannerText] = useState(null); // "GOAL!" or "SAVED!"
+  const [selectedSpot, setSelectedSpot] = useState(null);
+  const [animatingKick, setAnimatingKick] = useState(null);
+  const [goalBannerText, setGoalBannerText] = useState(null);
   const [showProvablyModal, setShowProvablyModal] = useState(false);
 
-  // Restore any active penalty round on mount
+  // Restore active penalty round and dynamic platform settings on mount
   useEffect(() => {
     let isMounted = true;
     async function restoreActiveRound() {
@@ -142,6 +137,9 @@ export default function PenaltyGame({
         const res = await fetch('/api/games/penalty/state');
         if (res.ok) {
           const data = await res.json();
+          if (data.settings && isMounted) {
+            setPenaltySettings(data.settings);
+          }
           if (data.active && data.round && isMounted) {
             const r = data.round;
             setRoundId(r.id);
@@ -162,6 +160,8 @@ export default function PenaltyGame({
     return () => { isMounted = false; };
   }, []);
 
+  const maxShots = penaltySettings.maxShots || penaltySettings.multipliers.length;
+
   // Prospective values
   const currentPayout = useMemo(() => {
     if (!isPlaying || currentStreak === 0) return 0;
@@ -169,8 +169,8 @@ export default function PenaltyGame({
   }, [isPlaying, currentStreak, stake, currentMultiplier]);
 
   const nextMultiplier = useMemo(() => {
-    return getPenaltyMultiplier(currentStreak + 1);
-  }, [currentStreak]);
+    return getPenaltyMultiplier(currentStreak + 1, penaltySettings.multipliers);
+  }, [currentStreak, penaltySettings.multipliers]);
 
   const nextPayout = useMemo(() => {
     return Math.floor(stake * nextMultiplier * 100) / 100;
@@ -215,7 +215,7 @@ export default function PenaltyGame({
       if (typeof data.newBalance === 'number') {
         onBalanceChange(data.newBalance);
       }
-      triggerToast('Shootout started! Pick a corner to kick.', 'info');
+      triggerToast('Shootout started! Pick a target to kick.', 'info');
     } catch (err) {
       console.error('Penalty start error:', err);
       triggerToast('Network error starting shootout.', 'error');
@@ -263,7 +263,6 @@ export default function PenaltyGame({
           setShotsHistory(data.shotsHistory || []);
 
           if (data.isCleared || data.status === 'WON') {
-            // Full 5/5 cleared!
             setGameResult('WON');
             setIsPlaying(false);
             if (data.serverSeed) setServerSeed(data.serverSeed);
@@ -280,7 +279,6 @@ export default function PenaltyGame({
             triggerToast(data.message, 'success');
           }
         } else {
-          // Saved!
           playAudioFX('save');
           setGoalBannerText('SAVED! 🧤');
           setGameResult('SAVED');
@@ -291,7 +289,6 @@ export default function PenaltyGame({
         }
 
         setIsShooting(false);
-        // Clear banner after 1.8 seconds
         setTimeout(() => {
           setAnimatingKick(null);
           setGoalBannerText(null);
@@ -348,14 +345,12 @@ export default function PenaltyGame({
     }
   };
 
-  // Quick random kick
   const handleRandomKick = () => {
     if (!isPlaying || isShooting || animatingKick) return;
     const randomSpot = PENALTY_SPOTS[Math.floor(Math.random() * PENALTY_SPOTS.length)];
     handleTakeKick(randomSpot);
   };
 
-  // Helper for coordinates inside the goal SVG / net
   const getSpotCoordinates = (spot) => {
     switch (spot) {
       case 'TL': return { x: '18%', y: '24%' };
@@ -367,7 +362,6 @@ export default function PenaltyGame({
     }
   };
 
-  // Helper for Keeper translation during dive
   const getKeeperTransform = () => {
     if (!animatingKick) return 'translate(-50%, 0)';
     const dive = animatingKick.keeperDive;
@@ -381,7 +375,6 @@ export default function PenaltyGame({
     }
   };
 
-  // Helper for Ball translation during shot flight
   const getBallFlightStyle = () => {
     if (!animatingKick) return { bottom: '22px', left: '50%', transform: 'translate(-50%, 0) scale(1)' };
     const targetCoords = getSpotCoordinates(animatingKick.spot);
@@ -406,7 +399,7 @@ export default function PenaltyGame({
 
         <div className="jp-penalty-header-actions">
           <div className="jp-penalty-rtp-badge">
-            <span className="jp-rtp-dot" /> 96.5% RTP • PROVABLY FAIR
+            <span className="jp-rtp-dot" /> {Math.round((penaltySettings.goalProbability || 0.75) * 100)}% Conversion • PROVABLY FAIR
           </div>
           <button
             onClick={() => setShowProvablyModal(true)}
@@ -418,9 +411,9 @@ export default function PenaltyGame({
         </div>
       </div>
 
-      {/* ---------------- 5-SHOT MULTIPLIER LADDER ---------------- */}
+      {/* ---------------- CONFIGURABLE MULTIPLIER LADDER ---------------- */}
       <div className="jp-penalty-ladder">
-        {PENALTY_MULTIPLIERS.map((mult, index) => {
+        {penaltySettings.multipliers.map((mult, index) => {
           const shotNum = index + 1;
           const isScored = shotsHistory[index]?.result === 'GOAL';
           const isSaved = shotsHistory[index]?.result === 'SAVED';
@@ -445,11 +438,9 @@ export default function PenaltyGame({
 
       {/* ---------------- MAIN STADIUM & GOAL ARENA ---------------- */}
       <div className="jp-penalty-stadium">
-        {/* Stadium Floodlights & Crowd Background Pattern */}
         <div className="jp-stadium-lights" />
         <div className="jp-pitch-grass" />
 
-        {/* Goal Post Frame & Net */}
         <div className="jp-goal-arena">
           <div className="jp-crossbar" />
           <div className="jp-post-left" />
@@ -494,21 +485,16 @@ export default function PenaltyGame({
             style={{ transform: getKeeperTransform() }}
           >
             <div className="jp-keeper-svg-wrap">
-              {/* Goalkeeper Silhouette Vector */}
               <svg viewBox="0 0 100 120" className="jp-keeper-svg">
-                {/* Body & Jersey */}
                 <ellipse cx="50" cy="22" rx="10" ry="11" fill="#facc15" />
                 <path d="M50 14 Q58 10 50 8 Q42 10 50 14" fill="#1e293b" />
                 <path d="M35 34 Q50 30 65 34 L62 70 Q50 72 38 70 Z" fill="#0284c7" />
-                {/* Arms & Big Keeper Gloves */}
                 <path d="M36 36 L18 48 L14 42" stroke="#0284c7" strokeWidth="8" strokeLinecap="round" />
                 <circle cx="12" cy="42" r="7" fill="#ef4444" />
                 <path d="M64 36 L82 48 L86 42" stroke="#0284c7" strokeWidth="8" strokeLinecap="round" />
                 <circle cx="88" cy="42" r="7" fill="#ef4444" />
-                {/* Shorts & Legs */}
                 <path d="M38 70 L34 94 L46 94 L48 72" fill="#0f172a" />
                 <path d="M62 70 L66 94 L54 94 L52 72" fill="#0f172a" />
-                {/* Boots */}
                 <ellipse cx="40" cy="98" rx="8" ry="4" fill="#e2e8f0" />
                 <ellipse cx="60" cy="98" rx="8" ry="4" fill="#e2e8f0" />
               </svg>
@@ -544,16 +530,17 @@ export default function PenaltyGame({
 
       {/* ---------------- BOTTOM CONTROLS & STAKE PANEL ---------------- */}
       <div className="jp-penalty-controls">
-        {/* Stake Configuration */}
         <div className="jp-penalty-stake-box">
           <div className="jp-stake-label-row">
             <span className="jp-stake-title">STAKE (KES)</span>
-            <span className="jp-stake-limits">Min: KES 10 • Max: KES 40,000</span>
+            <span className="jp-stake-limits">
+              Min: KES {penaltySettings.minBet || 10} • Max: KES {(penaltySettings.maxBet || 40000).toLocaleString()}
+            </span>
           </div>
 
           <div className="jp-stake-stepper">
             <button
-              onClick={() => setStake((prev) => Math.max(10, prev - 10))}
+              onClick={() => setStake((prev) => Math.max(penaltySettings.minBet || 10, prev - 10))}
               disabled={isPlaying || isStarting}
               className="jp-step-btn"
             >
@@ -564,13 +551,13 @@ export default function PenaltyGame({
               value={stake}
               onChange={(e) => {
                 const val = Number(e.target.value);
-                if (!isNaN(val)) setStake(Math.max(10, Math.min(40000, val)));
+                if (!isNaN(val)) setStake(Math.max(penaltySettings.minBet || 10, Math.min(penaltySettings.maxBet || 40000, val)));
               }}
               disabled={isPlaying || isStarting}
               className="jp-stake-input"
             />
             <button
-              onClick={() => setStake((prev) => Math.min(40000, prev + 10))}
+              onClick={() => setStake((prev) => Math.min(penaltySettings.maxBet || 40000, prev + 10))}
               disabled={isPlaying || isStarting}
               className="jp-step-btn"
             >
@@ -578,7 +565,6 @@ export default function PenaltyGame({
             </button>
           </div>
 
-          {/* Quick Stake Chips: 50, 100, 250, 500 */}
           <div className="jp-quick-chips">
             {[50, 100, 250, 500].map((val) => (
               <button
@@ -593,7 +579,6 @@ export default function PenaltyGame({
           </div>
         </div>
 
-        {/* Action Center */}
         <div className="jp-penalty-action-box">
           {!isPlaying ? (
             <button
@@ -609,7 +594,6 @@ export default function PenaltyGame({
             </button>
           ) : (
             <div className="jp-active-actions">
-              {/* Random Shot */}
               <button
                 onClick={handleRandomKick}
                 disabled={isShooting || Boolean(animatingKick)}
@@ -619,7 +603,6 @@ export default function PenaltyGame({
                 🎲 RANDOM SHOT
               </button>
 
-              {/* Cashout Button */}
               <button
                 onClick={handleCashout}
                 disabled={currentStreak === 0 || isCashingOut || isShooting}
@@ -641,10 +624,9 @@ export default function PenaltyGame({
             </div>
           )}
 
-          {/* In-Play Status Info */}
           {isPlaying && (
             <div className="jp-inplay-info">
-              <span>Goal Streak: <strong>{currentStreak} / {MAX_SHOTS}</strong></span>
+              <span>Goal Streak: <strong>{currentStreak} / {maxShots}</strong></span>
               <span>Next Goal: <strong>{nextMultiplier}x (KES {nextPayout.toLocaleString()})</strong></span>
             </div>
           )}
@@ -684,13 +666,13 @@ export default function PenaltyGame({
 
               <div className="jp-pf-math-box">
                 <div className="jp-math-row">
-                  <span>Theoretical RTP:</span> <strong>96.5%</strong>
+                  <span>Streak Series Length:</span> <strong>{maxShots} Shots</strong>
                 </div>
                 <div className="jp-math-row">
-                  <span>Goal Success Probability:</span> <strong>80.0% per kick</strong>
+                  <span>Goal Success Probability:</span> <strong>{Math.round((penaltySettings.goalProbability || 0.75) * 100)}% per kick</strong>
                 </div>
                 <div className="jp-math-row">
-                  <span>Max Streak Multiplier:</span> <strong>30.72x (5 Goals)</strong>
+                  <span>Clean Sweep Multiplier:</span> <strong>{penaltySettings.multipliers[maxShots - 1]}x ({maxShots} Goals)</strong>
                 </div>
               </div>
             </div>
@@ -777,10 +759,10 @@ export default function PenaltyGame({
           color: #fff;
         }
 
-        /* Multiplier Ladder */
+        /* Responsive Multiplier Ladder */
         .jp-penalty-ladder {
           display: grid;
-          grid-template-columns: repeat(5, 1fr);
+          grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
           gap: 8px;
         }
 
@@ -788,25 +770,25 @@ export default function PenaltyGame({
           background: rgba(15, 23, 42, 0.8);
           border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 10px;
-          padding: 8px 6px;
+          padding: 8px 4px;
           text-align: center;
           transition: all 0.3s;
         }
 
         .jp-step-shot-label {
-          font-size: 10px;
+          font-size: 9.5px;
           color: #64748b;
-          font-weight: 600;
+          font-weight: 700;
           text-transform: uppercase;
         }
 
         .jp-step-icon {
-          font-size: 18px;
-          margin: 4px 0;
+          font-size: 16px;
+          margin: 3px 0;
         }
 
         .jp-step-mult {
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 800;
           color: #cbd5e1;
         }

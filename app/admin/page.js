@@ -23,6 +23,18 @@ export default function JetPesaAdminPage() {
   const [betsData, setBetsData] = useState([]);
   const [ledgerData, setLedgerData] = useState({ deposits: [], withdrawals: [] });
 
+  // TAB 6: Penalty Shootout Engine State
+  const [penaltySettings, setPenaltySettings] = useState(null);
+  const [penaltyStats, setPenaltyStats] = useState(null);
+  const [penaltyPresets, setPenaltyPresets] = useState({});
+  const [penaltyLoading, setPenaltyLoading] = useState(false);
+  const [penaltySaving, setPenaltySaving] = useState(false);
+  const [penaltyStepsCount, setPenaltyStepsCount] = useState(8);
+  const [penaltyMultipliers, setPenaltyMultipliers] = useState([1.25, 1.60, 2.10, 2.80, 3.80, 5.20, 7.50, 11.00]);
+  const [penaltyGoalProb, setPenaltyGoalProb] = useState(75);
+  const [penaltyMinBet, setPenaltyMinBet] = useState(10);
+  const [penaltyMaxBet, setPenaltyMaxBet] = useState(40000);
+
   const [overrideModal, setOverrideModal] = useState({ open: false, cycleIndex: null, currentPoint: 2.0, newPoint: '' });
   const [adjustModal, setAdjustModal] = useState({ open: false, user: null, amount: '', reason: '' });
   const [instantCrashing, setInstantCrashing] = useState(false);
@@ -213,6 +225,108 @@ export default function JetPesaAdminPage() {
     }
   }, [adminFetch]);
 
+  // Load Penalty Shootout Configuration & Live Stats
+  const loadPenaltyAdminData = useCallback(async () => {
+    setPenaltyLoading(true);
+    try {
+      const res = await adminFetch('/api/admin/games/penalty');
+      const data = await res.json();
+      if (data.success && data.settings) {
+        setPenaltySettings(data.settings);
+        setPenaltyStepsCount(data.settings.maxShots || data.settings.multipliers.length);
+        setPenaltyMultipliers([...data.settings.multipliers]);
+        setPenaltyGoalProb(Math.round((data.settings.goalProbability || 0.75) * 100));
+        setPenaltyMinBet(data.settings.minBet || 10);
+        setPenaltyMaxBet(data.settings.maxBet || 40000);
+        if (data.presets) setPenaltyPresets(data.presets);
+        if (data.stats) setPenaltyStats(data.stats);
+      }
+    } catch (e) {
+      console.warn('Penalty admin error:', e);
+    } finally {
+      setPenaltyLoading(false);
+    }
+  }, [adminFetch]);
+
+  const handleStepCountChange = (newCount) => {
+    const count = Math.max(3, Math.min(15, parseInt(newCount, 10) || 3));
+    setPenaltyStepsCount(count);
+    setPenaltyMultipliers((prev) => {
+      const copy = [...prev];
+      if (count > copy.length) {
+        while (copy.length < count) {
+          const last = copy[copy.length - 1] || 1.25;
+          const nextVal = parseFloat((last * 1.35).toFixed(2));
+          copy.push(nextVal);
+        }
+      } else if (count < copy.length) {
+        copy.splice(count);
+      }
+      return copy;
+    });
+  };
+
+  const handleMultiplierChange = (idx, val) => {
+    const num = parseFloat(val);
+    setPenaltyMultipliers((prev) => {
+      const next = [...prev];
+      next[idx] = isNaN(num) ? '' : num;
+      return next;
+    });
+  };
+
+  const applyPenaltyPreset = (presetKey) => {
+    const p = penaltyPresets[presetKey];
+    if (!p) return;
+    setPenaltyStepsCount(p.maxShots);
+    setPenaltyMultipliers([...p.multipliers]);
+    setPenaltyGoalProb(Math.round(p.goalProbability * 100));
+    showToast(`Applied preset: ${p.name}`, 'success');
+  };
+
+  const handleSavePenaltySettings = async () => {
+    setPenaltySaving(true);
+    try {
+      const cleanMults = penaltyMultipliers.map((m) => parseFloat(Number(m).toFixed(2)));
+      for (let i = 0; i < cleanMults.length; i++) {
+        if (isNaN(cleanMults[i]) || cleanMults[i] <= 1.0) {
+          showToast(`Step ${i + 1} multiplier must be greater than 1.00x`, 'error');
+          setPenaltySaving(false);
+          return;
+        }
+        if (i > 0 && cleanMults[i] <= cleanMults[i - 1]) {
+          showToast(`Step ${i + 1} (${cleanMults[i]}x) must be greater than step ${i} (${cleanMults[i - 1]}x)`, 'error');
+          setPenaltySaving(false);
+          return;
+        }
+      }
+
+      const res = await adminFetch('/api/admin/games/penalty', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maxShots: cleanMults.length,
+          multipliers: cleanMults,
+          goalProbability: parseFloat((penaltyGoalProb / 100).toFixed(2)),
+          minBet: Number(penaltyMinBet),
+          maxBet: Number(penaltyMaxBet),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPenaltySettings(data.settings);
+        showToast(data.message || 'Penalty Shootout steps & multipliers updated!', 'success');
+        loadPenaltyAdminData();
+      } else {
+        showToast(data.message || 'Failed to save penalty settings.', 'error');
+      }
+    } catch (e) {
+      showToast(e.message || 'Network error saving settings.', 'error');
+    } finally {
+      setPenaltySaving(false);
+    }
+  };
+
   // Initial Auth Check
   useEffect(() => {
     const saved = getStoredSecret();
@@ -258,7 +372,8 @@ export default function JetPesaAdminPage() {
     else if (activeTab === 'users') loadUsers(userSearch);
     else if (activeTab === 'bets') loadBets();
     else if (activeTab === 'ledger') loadLedger();
-  }, [activeTab, isAuthenticated, loadRoundsRadar, loadOverview, loadUsers, loadBets, loadLedger, userSearch]);
+    else if (activeTab === 'penalty') loadPenaltyAdminData();
+  }, [activeTab, isAuthenticated, loadRoundsRadar, loadOverview, loadUsers, loadBets, loadLedger, loadPenaltyAdminData, userSearch]);
 
   // Save Round Override
   const submitRoundOverride = async () => {
@@ -798,6 +913,12 @@ export default function JetPesaAdminPage() {
           onClick={() => setActiveTab('ledger')}
         >
           💳 M-Pesa In/Out Ledger
+        </button>
+        <button
+          className={`jp-admin-tab-btn ${activeTab === 'penalty' ? 'active' : ''}`}
+          onClick={() => setActiveTab('penalty')}
+        >
+          ⚽ Penalty Multipliers & Steps
         </button>
       </nav>
 
@@ -1722,6 +1843,293 @@ export default function JetPesaAdminPage() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 6: PENALTY SHOOTOUT ENGINE CONFIGURATION                      */}
+        {/* ================================================================= */}
+        {activeTab === 'penalty' && (
+          <div className="jp-admin-penalty-view">
+            {/* Header / Actions */}
+            <div className="jp-panel-header" style={{ marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>⚽</span> Penalty Shootout Mathematical Engine & Risk Management
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: 11, color: '#94a3b8' }}>
+                  Configure streak progression steps, multipliers, house margin, and payout volatility in real-time.
+                </p>
+              </div>
+              <button
+                onClick={loadPenaltyAdminData}
+                disabled={penaltyLoading}
+                className="jp-btn-refresh"
+                style={{ padding: '6px 12px', fontSize: 11, background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: 6, cursor: 'pointer' }}
+              >
+                {penaltyLoading ? 'Refreshing...' : '🔄 Refresh Stats'}
+              </button>
+            </div>
+
+            {/* KPI Cards */}
+            <div className="jp-kpi-grid" style={{ marginBottom: 20 }}>
+              <div className="jp-kpi-card">
+                <span className="jp-kpi-label">TOTAL SHOOTOUTS</span>
+                <div className="jp-kpi-val text-cyan">{(penaltyStats?.totalRounds || 0).toLocaleString()}</div>
+                <small>Win Rate: {penaltyStats?.winRate || 0}%</small>
+              </div>
+              <div className="jp-kpi-card">
+                <span className="jp-kpi-label">TOTAL STAKED</span>
+                <div className="jp-kpi-val text-amber">KES {(penaltyStats?.totalStaked || 0).toLocaleString()}</div>
+                <small>Gross turnover</small>
+              </div>
+              <div className="jp-kpi-card">
+                <span className="jp-kpi-label">TOTAL PAYOUTS</span>
+                <div className="jp-kpi-val text-rose">KES {(penaltyStats?.totalWon || 0).toLocaleString()}</div>
+                <small>Player cashouts & jackpots</small>
+              </div>
+              <div className="jp-kpi-card">
+                <span className="jp-kpi-label">NET HOUSE PROFIT</span>
+                <div className="jp-kpi-val text-green">KES {(penaltyStats?.netHouseProfit || 0).toLocaleString()}</div>
+                <small>Realized GGR</small>
+              </div>
+              <div className="jp-kpi-card">
+                <span className="jp-kpi-label">REALIZED HOUSE MARGIN</span>
+                <div className="jp-kpi-val text-white">
+                  {penaltyStats?.rtpRealized !== undefined
+                    ? `${(100 - penaltyStats.rtpRealized).toFixed(1)}%`
+                    : '25.0%'}
+                </div>
+                <small>Theoretical Target: {(100 - penaltyGoalProb).toFixed(1)}%</small>
+              </div>
+            </div>
+
+            {/* Presets Bar */}
+            <section className="jp-admin-panel" style={{ marginBottom: 20 }}>
+              <div className="jp-panel-header">
+                <h4>🎯 Risk Presets & Multiplier Templates</h4>
+              </div>
+              <p style={{ margin: '0 0 12px', fontSize: 11, color: '#94a3b8' }}>
+                Quickly apply proven configurations to optimize the platform house edge against runaway players.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                {Object.keys(penaltyPresets).map((k) => {
+                  const p = penaltyPresets[k];
+                  const isCurrent = penaltyStepsCount === p.maxShots && penaltyMultipliers[0] === p.multipliers[0];
+                  return (
+                    <div
+                      key={k}
+                      onClick={() => applyPenaltyPreset(k)}
+                      style={{
+                        background: isCurrent ? 'rgba(34, 197, 94, 0.12)' : '#090d16',
+                        border: `1px solid ${isCurrent ? '#22c55e' : 'rgba(255,255,255,0.08)'}`,
+                        borderRadius: 8,
+                        padding: 12,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <strong style={{ fontSize: 12, color: isCurrent ? '#22c55e' : '#fff' }}>{p.name}</strong>
+                        <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.1)', color: '#fbbf24', fontWeight: 800 }}>
+                          {p.tag}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#cbd5e1' }}>
+                        {p.maxShots} Steps: <strong>{p.multipliers[0]}x</strong> ➔ <strong>{p.multipliers[p.maxShots - 1]}x</strong>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                        Goal Rate: {Math.round(p.goalProbability * 100)}% • House Edge: ~{(100 - p.goalProbability * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Global Settings (Steps, Goal Probability, Limits) */}
+            <section className="jp-admin-panel" style={{ marginBottom: 20 }}>
+              <div className="jp-panel-header">
+                <h4>⚙️ Streak Steps & House Parameters</h4>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+                {/* Steps Stepper */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6 }}>
+                    SERIES STREAK STEPS (3 - 15)
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      onClick={() => handleStepCountChange(penaltyStepsCount - 1)}
+                      disabled={penaltyStepsCount <= 3}
+                      style={{ width: 36, height: 36, background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', fontSize: 16, cursor: 'pointer' }}
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min="3"
+                      max="15"
+                      value={penaltyStepsCount}
+                      onChange={(e) => handleStepCountChange(e.target.value)}
+                      style={{ flex: 1, height: 36, background: '#090d16', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', textAlign: 'center', fontSize: 14, fontWeight: 800 }}
+                    />
+                    <button
+                      onClick={() => handleStepCountChange(penaltyStepsCount + 1)}
+                      disabled={penaltyStepsCount >= 15}
+                      style={{ width: 36, height: 36, background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', fontSize: 16, cursor: 'pointer' }}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                    Controls the number of consecutive goals required to hit the maximum jackpot.
+                  </small>
+                </div>
+
+                {/* Goal Conversion Probability */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6 }}>
+                    GOAL CONVERSION RATE: <span style={{ color: '#22c55e', fontWeight: 900 }}>{penaltyGoalProb}%</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="60"
+                    max="88"
+                    step="1"
+                    value={penaltyGoalProb}
+                    onChange={(e) => setPenaltyGoalProb(Number(e.target.value))}
+                    style={{ width: '100%', accentColor: '#22c55e' }}
+                  />
+                  <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                    Keeper save chance: {100 - penaltyGoalProb}%. Lower goal % protects platform house edge.
+                  </small>
+                </div>
+
+                {/* Min / Max Bet Limits */}
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6 }}>
+                    WAGER LIMITS (KES)
+                  </label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="number"
+                      placeholder="Min KES"
+                      value={penaltyMinBet}
+                      onChange={(e) => setPenaltyMinBet(Number(e.target.value))}
+                      style={{ flex: 1, height: 36, background: '#090d16', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', textAlign: 'center', fontSize: 12 }}
+                    />
+                    <input
+                      type="number"
+                      placeholder="Max KES"
+                      value={penaltyMaxBet}
+                      onChange={(e) => setPenaltyMaxBet(Number(e.target.value))}
+                      style={{ flex: 1, height: 36, background: '#090d16', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', textAlign: 'center', fontSize: 12 }}
+                    />
+                  </div>
+                  <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 4 }}>
+                    Min bet: KES {penaltyMinBet} • Max bet: KES {penaltyMaxBet.toLocaleString()}
+                  </small>
+                </div>
+              </div>
+            </section>
+
+            {/* Configurable Multiplier Ladder */}
+            <section className="jp-admin-panel" style={{ marginBottom: 24 }}>
+              <div className="jp-panel-header">
+                <h4>📊 Step-by-Step Multiplier Ladder ({penaltyMultipliers.length} Steps)</h4>
+                <span style={{ fontSize: 10, color: '#64748b' }}>Every step must be strictly greater than the previous step</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginTop: 12 }}>
+                {penaltyMultipliers.map((mult, idx) => {
+                  const shotNum = idx + 1;
+                  const isCleanSweep = idx === penaltyMultipliers.length - 1;
+                  const cumulativeProb = Math.pow(penaltyGoalProb / 100, shotNum) * 100;
+
+                  return (
+                    <div
+                      key={shotNum}
+                      style={{
+                        background: isCleanSweep ? 'rgba(245, 158, 11, 0.1)' : '#090d16',
+                        border: `1px solid ${isCleanSweep ? '#f59e0b' : 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: 8,
+                        padding: 10,
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
+                        Shot #{shotNum} {isCleanSweep && '🏆'}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, margin: '6px 0' }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={mult}
+                          onChange={(e) => handleMultiplierChange(idx, e.target.value)}
+                          style={{
+                            width: 80,
+                            padding: '6px 4px',
+                            background: '#1e293b',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            borderRadius: 6,
+                            color: '#fff',
+                            fontSize: 13,
+                            fontWeight: 800,
+                            textAlign: 'center',
+                          }}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 800, color: '#f59e0b' }}>x</span>
+                      </div>
+                      <div style={{ fontSize: 9.5, color: '#64748b' }}>
+                        Win Chance: <strong style={{ color: '#cbd5e1' }}>{cumulativeProb.toFixed(1)}%</strong>
+                      </div>
+                      {isCleanSweep && (
+                        <div style={{ marginTop: 4, fontSize: 9, fontWeight: 800, color: '#f59e0b', letterSpacing: 0.5 }}>
+                          CLEAN SWEEP (MAX)
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+                <button
+                  onClick={loadPenaltyAdminData}
+                  disabled={penaltySaving}
+                  style={{
+                    padding: '10px 16px',
+                    background: '#1e293b',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 8,
+                    color: '#94a3b8',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Discard Changes
+                </button>
+                <button
+                  onClick={handleSavePenaltySettings}
+                  disabled={penaltySaving}
+                  style={{
+                    padding: '10px 24px',
+                    background: 'linear-gradient(135deg, #16a34a, #22c55e)',
+                    border: 'none',
+                    borderRadius: 8,
+                    color: '#fff',
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(34, 197, 94, 0.4)',
+                  }}
+                >
+                  {penaltySaving ? 'SAVING CONFIGURATION...' : '💾 SAVE PENALTY CONFIGURATION'}
+                </button>
               </div>
             </section>
           </div>
