@@ -2113,20 +2113,22 @@ export default function UltimateJetPesaCockpit() {
         </div>
       </header>
 
-      {/* History Tape */}
-      <div className="jp-history-tape" suppressHydrationWarning>
-        {!mounted || historyTape.length === 0 ? (
-          <div style={{ color: '#64748b', fontSize: '12px', fontWeight: '800', padding: '5px 2px' }}>
-            {mounted ? 'Previous rounds will appear after the first completed flight.' : ''}
-          </div>
-        ) : (
-          historyTape.map((h, i) => (
-            <div key={`${h}-${i}`} className={`jp-history-chip ${h >= 10 ? 'jp-history-ultra' : h >= 2 ? 'jp-history-high' : 'jp-history-low'}`} style={{ transform: `rotateX(14deg) translateZ(${Math.max(0, 12 - i)}px)` }}>
-              {Number(h).toFixed(2)}x
+      {/* Aviator History Tape - only visible when Aviator is active */}
+      {activeGameId === 'aviator' && (
+        <div className="jp-history-tape" suppressHydrationWarning>
+          {!mounted || historyTape.length === 0 ? (
+            <div style={{ color: '#64748b', fontSize: '12px', fontWeight: '800', padding: '5px 2px' }}>
+              {mounted ? 'Previous rounds will appear after the first completed flight.' : ''}
             </div>
-          ))
-        )}
-      </div>
+          ) : (
+            historyTape.map((h, i) => (
+              <div key={`${h}-${i}`} className={`jp-history-chip ${h >= 10 ? 'jp-history-ultra' : h >= 2 ? 'jp-history-high' : 'jp-history-low'}`} style={{ transform: `rotateX(14deg) translateZ(${Math.max(0, 12 - i)}px)` }}>
+                {Number(h).toFixed(2)}x
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Main Layout */}
       <div className="jp-layout">
