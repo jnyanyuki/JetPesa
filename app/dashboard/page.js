@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { authClient } from '../../lib/auth/client';
 import confetti from 'canvas-confetti';
-import { generateDynamicLobbyChat } from '../../lib/chatEngine';
+import { generateDynamicLobbyChat, getGameInitialChatHistory } from '../../lib/chatEngine';
+import { getGameFeedConfig, generateGameLiveBet, generateInitialGameLiveBets } from '../../lib/games/liveBetsFeedEngine';
 import { getRandomPlayerPersona, getPersonaBySeed } from '../../lib/playerSeeds';
 import { SPRIBE_PLANE_DATA_URL } from '../../lib/planeAsset';
 import { getGameById, GAMES_REGISTRY } from '../../lib/games/registry';
@@ -154,7 +155,12 @@ export default function UltimateJetPesaCockpit() {
   const [myBetsHistory, setMyBetsHistory] = useState([]);
   const [activeTab, setActiveTab] = useState('all');
   const [activeGameId, setActiveGameId] = useState('aviator');
+  const activeGameIdRef = useRef('aviator');
+  useEffect(() => {
+    activeGameIdRef.current = activeGameId;
+  }, [activeGameId]);
   const currentGameConfig = useMemo(() => getGameById(activeGameId), [activeGameId]);
+  const activeGameFeedConfig = useMemo(() => getGameFeedConfig(activeGameId), [activeGameId]);
 
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -250,36 +256,102 @@ export default function UltimateJetPesaCockpit() {
     return () => clearInterval(interval);
   }, []);
 
+  // -------------------------------------------------------------
+  // GAME-SPECIFIC CHAT & LIVE BETS FEEDS
+  // -------------------------------------------------------------
+  const [chatLogsByGame, setChatLogsByGame] = useState(() => ({
+    aviator: getGameInitialChatHistory('aviator'),
+    mines: getGameInitialChatHistory('mines'),
+    penalty: getGameInitialChatHistory('penalty'),
+    plinko: getGameInitialChatHistory('plinko'),
+    dice: getGameInitialChatHistory('dice'),
+    coinflip: getGameInitialChatHistory('coinflip'),
+    hilo: getGameInitialChatHistory('hilo'),
+    roulette: getGameInitialChatHistory('roulette'),
+  }));
+
+  const activeChatLogs = useMemo(() => {
+    return chatLogsByGame[activeGameId] || chatLogsByGame.aviator || [];
+  }, [chatLogsByGame, activeGameId]);
+
+  const [otherGamesLiveBets, setOtherGamesLiveBets] = useState(() => ({
+    mines: generateInitialGameLiveBets('mines'),
+    penalty: generateInitialGameLiveBets('penalty'),
+    plinko: generateInitialGameLiveBets('plinko'),
+    dice: generateInitialGameLiveBets('dice'),
+    coinflip: generateInitialGameLiveBets('coinflip'),
+    hilo: generateInitialGameLiveBets('hilo'),
+    roulette: generateInitialGameLiveBets('roulette'),
+  }));
+
+  const currentDisplayLiveBets = useMemo(() => {
+    if (activeGameId === 'aviator') {
+      return liveBetsFeed;
+    }
+    return otherGamesLiveBets[activeGameId] || [];
+  }, [activeGameId, liveBetsFeed, otherGamesLiveBets]);
+
   const displayActivePlayers = useMemo(() => {
-    let count = activePlayersCount;
-    if (deckA.hasBetCurrent) count += 1;
-    if (deckB.hasBetCurrent) count += 1;
-    return count;
-  }, [activePlayersCount, deckA.hasBetCurrent, deckB.hasBetCurrent]);
+    if (activeGameId === 'aviator') {
+      let count = activePlayersCount;
+      if (deckA.hasBetCurrent) count += 1;
+      if (deckB.hasBetCurrent) count += 1;
+      return count;
+    }
+    const currentBets = otherGamesLiveBets[activeGameId] || [];
+    return (activeGameFeedConfig?.onlineBase || 1500) + currentBets.length;
+  }, [activeGameId, activePlayersCount, deckA.hasBetCurrent, deckB.hasBetCurrent, otherGamesLiveBets, activeGameFeedConfig]);
 
   const totalLivePlaced = useMemo(() => {
-    let sum = liveBetsFeed.reduce((acc, b) => acc + (Number(b.bet) || 0), 0);
-    if (deckA.hasBetCurrent) sum += Number(deckA.wager) || 0;
-    if (deckB.hasBetCurrent) sum += Number(deckB.wager) || 0;
-    return sum;
-  }, [liveBetsFeed, deckA.hasBetCurrent, deckA.wager, deckB.hasBetCurrent, deckB.wager]);
+    if (activeGameId === 'aviator') {
+      let sum = liveBetsFeed.reduce((acc, b) => acc + (Number(b.bet) || 0), 0);
+      if (deckA.hasBetCurrent) sum += Number(deckA.wager) || 0;
+      if (deckB.hasBetCurrent) sum += Number(deckB.wager) || 0;
+      return sum;
+    }
+    const currentBets = otherGamesLiveBets[activeGameId] || [];
+    return currentBets.reduce((acc, b) => acc + (Number(b.bet) || 0), 0);
+  }, [activeGameId, liveBetsFeed, deckA.hasBetCurrent, deckA.wager, deckB.hasBetCurrent, deckB.wager, otherGamesLiveBets]);
 
   const totalLiveWon = useMemo(() => {
-    return liveBetsFeed.reduce((acc, b) => {
+    if (activeGameId === 'aviator') {
+      return liveBetsFeed.reduce((acc, b) => {
+        if (b.status === 'cashed') {
+          const payout = Number(b.payout) || Math.floor((Number(b.bet) || 0) * (Number(b.mult) || 1));
+          return acc + payout;
+        }
+        return acc;
+      }, 0);
+    }
+    const currentBets = otherGamesLiveBets[activeGameId] || [];
+    return currentBets.reduce((acc, b) => {
       if (b.status === 'cashed') {
         const payout = Number(b.payout) || Math.floor((Number(b.bet) || 0) * (Number(b.mult) || 1));
         return acc + payout;
       }
       return acc;
     }, 0);
-  }, [liveBetsFeed]);
+  }, [activeGameId, liveBetsFeed, otherGamesLiveBets]);
+
+  // Continuous live bet influx for non-aviator active games
+  useEffect(() => {
+    if (activeGameId === 'aviator') return;
+
+    const interval = setInterval(() => {
+      const newBet = generateGameLiveBet(activeGameId);
+      setOtherGamesLiveBets((prev) => {
+        const currentList = prev[activeGameId] || [];
+        return {
+          ...prev,
+          [activeGameId]: [newBet, ...currentList.slice(0, 39)],
+        };
+      });
+    }, 2200 + Math.random() * 1600);
+
+    return () => clearInterval(interval);
+  }, [activeGameId]);
+
   const [chatInput, setChatInput] = useState('');
-  const [chatLogs, setChatLogs] = useState([
-    { user: 'Turbo071***45', seed: 'turbo', msg: 'Admin, background rain drop claim active? 🙏', time: '17:50' },
-    { user: 'Diamond072***89', seed: 'diamond', msg: 'Leo tunakula rocket safi sana hapa JetPesa! 💎', time: '17:52' },
-    { user: 'Pilot079***12', seed: 'pilot', msg: 'Nimecash out 2.4x safi, ready for next takeoff!', time: '17:53' },
-    { user: 'Shujaa011***90', seed: 'shujaa', msg: 'Watu wangu tuko locked in! Faida imeingia M-Pesa.', time: '17:55' },
-  ]);
 
   const [provablyData, setProvablyData] = useState(null);
   const [provablyLoading, setProvablyLoading] = useState(false);
@@ -781,7 +853,7 @@ export default function UltimateJetPesaCockpit() {
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatLogs]);
+  }, [activeChatLogs]);
 
   useEffect(() => {
     let timer = null;
@@ -790,15 +862,23 @@ export default function UltimateJetPesaCockpit() {
       // Natural human typing cadence between 4.5s and 8.5s
       const delay = Math.floor(Math.random() * 4000 + 4500);
       timer = setTimeout(() => {
+        const currentGame = activeGameIdRef.current || 'aviator';
         const ctx = gameContextRef.current;
         const newMsg = generateDynamicLobbyChat({
+          gameId: currentGame,
           currentMultiplier: ctx.multiplier,
           isBettingPhase: ctx.gameStatus === 'idle',
           hasCrashed: ctx.gameStatus === 'crashed',
           crashPoint: ctx.crashPoint,
         });
 
-        setChatLogs((prev) => [...prev.slice(-35), newMsg]);
+        setChatLogsByGame((prev) => {
+          const gameChannel = prev[currentGame] || [];
+          return {
+            ...prev,
+            [currentGame]: [...gameChannel.slice(-35), newMsg],
+          };
+        });
         scheduleNextChat();
       }, delay);
     };
@@ -1548,7 +1628,16 @@ export default function UltimateJetPesaCockpit() {
   const broadcastChatMessage = () => {
     if (!chatInput.trim()) return;
     if (balance <= 1000) { triggerToast('Only users with wallet above KES 1,000 can send messages.', 'error'); return; }
-    setChatLogs((p) => [...p, { user: 'You', seed: 'you', msg: chatInput, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const userMsg = { user: 'You', seed: 'you', msg: chatInput, time };
+    const currentGame = activeGameIdRef.current || 'aviator';
+    setChatLogsByGame((p) => {
+      const channel = p[currentGame] || [];
+      return {
+        ...p,
+        [currentGame]: [...channel, userMsg],
+      };
+    });
     setChatInput('');
     playSynthesizedTone(800, 'sine', 0.03, 0.01);
   };
@@ -1616,52 +1705,64 @@ export default function UltimateJetPesaCockpit() {
   /* ---------------------------------------------------------------------- */
   /*  Render Helpers                                                         */
   /* ---------------------------------------------------------------------- */
-  const renderLiveBets = () => (
-    <div className="jp-panel-scroll">
-      <div className="jp-live-table-head">
-        <span className="jp-col-player">Player</span>
-        <span className="jp-col-bet">Bet KES</span>
-        <span className="jp-col-mult">X</span>
-        <span className="jp-col-win">Win KES</span>
-      </div>
-      {liveBetsFeed.length === 0 ? (
-        <div className="jp-empty-state">
-          <Icon name="jet" size={32} />
-          <strong>Preparing new round</strong>
-          <span>New wagers are entering...</span>
-        </div>
-      ) : (
-        <>
-          {liveBetsFeed.map((b) => {
-            const isWon = b.status === 'cashed';
-            const winAmount = b.payout || Math.floor(b.bet * b.mult);
-            const multVal = Number(b.mult || 1);
-            const multColor = multVal >= 10.0 ? '#fbbf24' : multVal >= 2.0 ? '#c084fc' : '#38bdf8';
+  const renderLiveBets = () => {
+    const bets = currentDisplayLiveBets;
+    const cfg = activeGameFeedConfig;
 
-            return (
-              <div key={b.id} className={`jp-live-row ${isWon ? 'jp-live-row-won' : ''}`}>
-                <div className="jp-live-player-cell">
-                  <UserAvatar seed={b.seed} size={24} />
-                  <span className="jp-live-user" title={b.username}>{b.username}</span>
+    return (
+      <div className="jp-panel-scroll">
+        <div className="jp-live-table-head">
+          <span className="jp-col-player">Player</span>
+          <span className="jp-col-bet">Bet KES</span>
+          <span className="jp-col-mult">{cfg.multCol}</span>
+          <span className="jp-col-win">Win KES</span>
+        </div>
+        {bets.length === 0 ? (
+          <div className="jp-empty-state">
+            <Icon name="jet" size={32} />
+            <strong>{cfg.emptyTitle}</strong>
+            <span>{cfg.emptySubtitle}</span>
+          </div>
+        ) : (
+          <>
+            {bets.map((b) => {
+              const isWon = b.status === 'cashed';
+              const winAmount = b.payout || Math.floor(b.bet * b.mult);
+              const multVal = Number(b.mult || 1);
+              const multColor = multVal >= 10.0 ? '#fbbf24' : multVal >= 2.0 ? '#c084fc' : '#38bdf8';
+
+              return (
+                <div key={b.id} className={`jp-live-row ${isWon ? 'jp-live-row-won' : ''}`}>
+                  <div className="jp-live-player-cell">
+                    <UserAvatar seed={b.seed} size={24} />
+                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                      <span className="jp-live-user" title={b.username}>{b.username}</span>
+                      {b.details && (
+                        <span style={{ fontSize: '10px', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {b.details}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="jp-live-bet-cell">
+                    {Number(b.bet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="jp-live-mult-cell" style={{ color: isWon ? multColor : 'transparent' }}>
+                    {isWon ? `${multVal.toFixed(2)}x` : ''}
+                  </div>
+                  <div className="jp-live-win-cell">
+                    {isWon
+                      ? Number(winAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                      : ''}
+                  </div>
                 </div>
-                <div className="jp-live-bet-cell">
-                  {Number(b.bet).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-                <div className="jp-live-mult-cell" style={{ color: isWon ? multColor : 'transparent' }}>
-                  {isWon ? `${multVal.toFixed(2)}x` : ''}
-                </div>
-                <div className="jp-live-win-cell">
-                  {isWon
-                    ? Number(winAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : ''}
-                </div>
-              </div>
-            );
-          })}
-        </>
-      )}
-    </div>
-  );
+              );
+            })}
+          </>
+        )}
+      </div>
+    );
+  };
 
   const renderMyBets = () => {
     const totalStake = myBetsHistory.reduce((acc, b) => acc + (Number(b.stake) || 0), 0);
@@ -2136,14 +2237,6 @@ export default function UltimateJetPesaCockpit() {
               onOpenDeposit={() => setIsDepositModalOpen(true)}
               onOpenProvably={openProvablyModal}
             />
-          ) : activeGameId === 'hilo' ? (
-            <HiloGame
-              balance={balance}
-              onBalanceChange={setBalance}
-              triggerToast={triggerToast}
-              onOpenDeposit={() => setIsDepositModalOpen(true)}
-              onOpenProvably={openProvablyModal}
-            />
           ) : (
             <GamePlaceholder
               gameId={activeGameId}
@@ -2157,7 +2250,7 @@ export default function UltimateJetPesaCockpit() {
             <div className="jp-tab-bar">
               <button onClick={() => setActiveTab('all')} className={`jp-tab ${activeTab === 'all' ? 'jp-active' : ''}`}>
                 <span className="jp-live-dot-pulse" />
-                LIVE ({lobbyOnlineCount.toLocaleString()})
+                LIVE ({displayActivePlayers.toLocaleString()})
               </button>
               <button onClick={() => { setActiveTab('mine'); fetchMyBetsHistory(); }} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>
                 MY BETS{myBetsHistory.length > 0 ? ` (${myBetsHistory.length})` : ''}
@@ -2168,7 +2261,7 @@ export default function UltimateJetPesaCockpit() {
                 <div className="jp-live-summary-card">
                   <div className="jp-live-summary-header">
                     <span className="jp-live-summary-dot jp-dot-pilots" />
-                    <span className="jp-live-summary-label">IN FLIGHT</span>
+                    <span className="jp-live-summary-label">{activeGameFeedConfig.activeLabel}</span>
                   </div>
                   <span className="jp-live-summary-value jp-val-pilots">
                     {displayActivePlayers.toLocaleString()}
@@ -2178,7 +2271,7 @@ export default function UltimateJetPesaCockpit() {
                 <div className="jp-live-summary-card">
                   <div className="jp-live-summary-header">
                     <span className="jp-live-summary-dot jp-dot-placed" />
-                    <span className="jp-live-summary-label">TOTAL PLACED</span>
+                    <span className="jp-live-summary-label">{activeGameFeedConfig.placedLabel}</span>
                   </div>
                   <span className="jp-live-summary-value jp-val-placed">
                     KES {totalLivePlaced.toLocaleString()}
@@ -2188,7 +2281,7 @@ export default function UltimateJetPesaCockpit() {
                 <div className="jp-live-summary-card">
                   <div className="jp-live-summary-header">
                     <span className="jp-live-summary-dot jp-dot-won" />
-                    <span className="jp-live-summary-label">TOTAL WON</span>
+                    <span className="jp-live-summary-label">{activeGameFeedConfig.wonLabel}</span>
                   </div>
                   <span className="jp-live-summary-value jp-val-won">
                     KES {totalLiveWon.toLocaleString()}
@@ -2201,9 +2294,12 @@ export default function UltimateJetPesaCockpit() {
         </div>
 
         <div className="jp-panel jp-right-panel" data-active={mobileActivePanel === 'chat'}>
-          <div className="jp-chat-header"><div className="jp-chat-dot" /><span>Lobby Chat</span></div>
+          <div className="jp-chat-header">
+            <div className="jp-chat-dot" />
+            <span>Lobby Chat • {currentGameConfig?.title || 'Community'}</span>
+          </div>
           <div className="jp-chat-scroll">
-            {chatLogs.map((c, i) => {
+            {activeChatLogs.map((c, i) => {
               const isMe = c.user === 'You';
               return (
                 <div key={i} className={`jp-chat-bubble ${isMe ? 'jp-chat-me' : ''}`}>
