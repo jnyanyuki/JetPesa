@@ -1730,6 +1730,235 @@ export default function UltimateJetPesaCockpit() {
     );
   };
 
+  const renderProfileTab = () => {
+    const totalStake = myBetsHistory.reduce((acc, b) => acc + (Number(b.stake) || 0), 0);
+    const totalWon = myBetsHistory.reduce((acc, b) => acc + (Number(b.winAmount) || 0), 0);
+    const netProfit = totalWon - totalStake;
+    const bestMultiplier = myBetsHistory.reduce((max, b) => Math.max(max, Number(b.multiplier) || 0), 0);
+    const wonCount = myBetsHistory.filter((b) => b.status === 'WON').length;
+    const winRate = myBetsHistory.length > 0 ? Math.round((wonCount / myBetsHistory.length) * 100) : 0;
+
+    return (
+      <div className="jp-panel-scroll jp-profile-scroll">
+        {/* Card 1: Kenyan Pilot Identity & BCLB Status */}
+        <div className="jp-profile-card">
+          <div className="jp-profile-header-row">
+            <div className="jp-profile-avatar-wrap">
+              <UserAvatar seed={user?.id || 'pilot'} size={48} />
+              <span className="jp-profile-online-badge" />
+            </div>
+            <div className="jp-profile-id-info">
+              <div className="jp-profile-name-row">
+                <span className="jp-profile-main-name">{editName || phoneProfile || 'Kenyan Pilot'}</span>
+                <span className="jp-bclb-badge">🇰🇪 BCLB 18+</span>
+              </div>
+              <div className="jp-profile-tags-row">
+                <span className="jp-kyc-tag"><Icon name="shield-check" size={11} /> KYC Tier 1 Verified</span>
+                <span className="jp-currency-tag">• KES Market</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 8-Digit Account ID Bar */}
+          <div className="jp-profile-account-id-box">
+            <div className="jp-account-id-label-col">
+              <span className="jp-account-id-sub">8-DIGIT PILOT ACCOUNT ID</span>
+              <span className="jp-account-id-code">{userIdCode || '32637692'}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleCopyUserId}
+              className={`jp-account-id-copy-btn ${copiedUserId ? 'copied' : ''}`}
+            >
+              <Icon name={copiedUserId ? 'check' : 'copy'} size={14} />
+              <span>{copiedUserId ? 'COPIED' : 'COPY ID'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Card 2: Wallet & M-Pesa Banking */}
+        <div className="jp-profile-card">
+          <div className="jp-card-section-title">
+            <Icon name="wallet" size={14} />
+            <span>M-PESA WALLET & FUNDS</span>
+          </div>
+
+          <div className="jp-wallet-balance-grid">
+            <div className="jp-wallet-balance-cell">
+              <span className="jp-balance-cell-label">WITHDRAWABLE CASH</span>
+              <span className="jp-balance-cell-val jp-green-text">KES {balance.toFixed(2)}</span>
+            </div>
+            <div className="jp-wallet-balance-cell">
+              <span className="jp-balance-cell-label">BONUS BALANCE</span>
+              <span className="jp-balance-cell-val">KES 0.00</span>
+            </div>
+            <div className="jp-wallet-balance-cell">
+              <span className="jp-balance-cell-label">TOTAL FUNDS</span>
+              <span className="jp-balance-cell-val">KES {balance.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <div className="jp-profile-wallet-actions">
+            <button
+              type="button"
+              onClick={() => setIsDepositModalOpen(true)}
+              className="jp-profile-action-btn jp-btn-deposit-mpesa"
+            >
+              <Icon name="plus" size={14} />
+              <span>DEPOSIT VIA M-PESA</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => balance > 0 ? setIsWithdrawModalOpen(true) : triggerToast('Wallet is empty. Deposit first.', 'info')}
+              className="jp-profile-action-btn jp-btn-withdraw-mpesa"
+            >
+              <Icon name="wallet" size={14} />
+              <span>WITHDRAW (B2C)</span>
+            </button>
+          </div>
+
+          {/* Linked M-Pesa Phone */}
+          <div className="jp-input-group-vertical" style={{ marginTop: '10px' }}>
+            <label className="jp-profile-input-label">
+              <span>PRIMARY M-PESA NUMBER</span>
+              <span className="jp-mpesa-active-pill">🟢 STK Active</span>
+            </label>
+            <div className="jp-phone-input-wrap">
+              <span className="jp-phone-prefix">+254</span>
+              <input
+                type="text"
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                placeholder="07XXXXXXXX or 01XXXXXXXX"
+                className="jp-profile-text-input"
+              />
+            </div>
+            <span className="jp-input-helper-text">
+              Direct M-Pesa STK push and automated B2C payout disbursements are linked to this phone.
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Betting History & Career Performance */}
+        <div className="jp-profile-card">
+          <div className="jp-card-section-title">
+            <Icon name="bar-chart-3" size={14} />
+            <span>KENYAN MARKET ACTIVITY STATS</span>
+          </div>
+
+          <div className="jp-stats-4grid">
+            <div className="jp-stat-tile">
+              <span className="jp-stat-tile-label">RECORDED WAGERS</span>
+              <span className="jp-stat-tile-val">{myBetsHistory.length}</span>
+            </div>
+            <div className="jp-stat-tile">
+              <span className="jp-stat-tile-label">TOTAL STAKED</span>
+              <span className="jp-stat-tile-val">KES {totalStake.toLocaleString()}</span>
+            </div>
+            <div className="jp-stat-tile">
+              <span className="jp-stat-tile-label">TOTAL WON</span>
+              <span className="jp-stat-tile-val jp-green-text">KES {totalWon.toLocaleString()}</span>
+            </div>
+            <div className="jp-stat-tile">
+              <span className="jp-stat-tile-label">NET PROFIT</span>
+              <span className={`jp-stat-tile-val ${netProfit >= 0 ? 'jp-green-text' : 'jp-rose-text'}`}>
+                {netProfit >= 0 ? '+' : ''}KES {netProfit.toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          <div className="jp-stat-secondary-row">
+            <div className="jp-stat-mini-pill">
+              <span>BEST MULTIPLIER:</span>
+              <strong style={{ color: bestMultiplier >= 10 ? '#fbbf24' : '#c084fc' }}>
+                {bestMultiplier > 0 ? `${bestMultiplier.toFixed(2)}x` : '—'}
+              </strong>
+            </div>
+            <div className="jp-stat-mini-pill">
+              <span>WIN RATE:</span>
+              <strong style={{ color: winRate >= 50 ? '#22c55e' : '#94a3b8' }}>{winRate}%</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Account Details & Editing */}
+        <div className="jp-profile-card">
+          <div className="jp-card-section-title">
+            <Icon name="settings" size={14} />
+            <span>ACCOUNT & NICKNAME</span>
+          </div>
+
+          <div className="jp-input-group-vertical">
+            <label className="jp-profile-input-label">DISPLAY NAME / PILOT NICKNAME</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              placeholder="Your nickname"
+              className="jp-profile-text-input"
+            />
+          </div>
+
+          <div className="jp-input-group-vertical" style={{ marginTop: '8px' }}>
+            <label className="jp-profile-input-label">REGISTERED SYSTEM EMAIL</label>
+            <input
+              type="text"
+              value={user?.email || `${editPhone || 'pilot'}@phone.jetpesa.com`}
+              disabled
+              readOnly
+              className="jp-profile-text-input jp-input-disabled"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleProfileUpdate}
+            className="jp-save-profile-btn"
+          >
+            <Icon name="check" size={14} />
+            <span>SAVE PROFILE CHANGES</span>
+          </button>
+        </div>
+
+        {/* Card 5: BCLB Regulatory Notice & Responsible Gaming */}
+        <div className="jp-profile-card jp-bclb-card">
+          <div className="jp-bclb-header">
+            <Icon name="shield-check" size={16} />
+            <span>BETTING CONTROL & LICENSING BOARD (BCLB)</span>
+          </div>
+          <p className="jp-bclb-text">
+            JetPesa operates in full compliance with the Betting, Lotteries and Gaming Act (Cap 131, Laws of Kenya).
+            Strictly 18+ only. Gambling can be addictive and financially hazardous. Play responsibly and set personal wager limits.
+          </p>
+          <div className="jp-bclb-controls">
+            <div className="jp-limit-chip">
+              <span className="jp-limit-label">DAILY STAKE LIMIT:</span>
+              <span className="jp-limit-val">KES 50,000 / Day</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsProvablyModalOpen(true)}
+              className="jp-provably-verify-btn"
+            >
+              <span>AUDIT PROVABLY FAIR SEED</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Card 6: Session & Sign Out */}
+        <div className="jp-profile-card" style={{ textAlign: 'center' }}>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="jp-signout-btn"
+          >
+            <span>SIGN OUT OF JETPESA</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const renderDeckPanel = (name, deck, setter) => {
     const isQueued = deck.hasBetNext;
     const isFlying = deck.hasBetCurrent;
@@ -1938,7 +2167,14 @@ export default function UltimateJetPesaCockpit() {
             <Icon name="cloud-rain" size={13} />
             <span className="jp-rain-label">RAIN</span>
           </button>
-          <button className="jp-profile-btn" onClick={() => setIsProfileModalOpen(true)} title={userIdCode ? `User ID: ${userIdCode}` : 'Profile'}>
+          <button
+            className={`jp-profile-btn ${activeTab === 'profile' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveTab('profile');
+              liveSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            title={userIdCode ? `User ID: ${userIdCode}` : 'Profile'}
+          >
             <Icon name="user" size={13} />
             <span className="jp-profile-label">{userIdCode ? `ID: ${userIdCode}` : 'PROFILE'}</span>
           </button>
@@ -2028,6 +2264,10 @@ export default function UltimateJetPesaCockpit() {
               <button onClick={() => { setActiveTab('mine'); fetchMyBetsHistory(); }} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>
                 MY BETS{myBetsHistory.length > 0 ? ` (${myBetsHistory.length})` : ''}
               </button>
+              <button onClick={() => setActiveTab('profile')} className={`jp-tab ${activeTab === 'profile' ? 'jp-active' : ''}`}>
+                <Icon name="user" size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                PROFILE
+              </button>
             </div>
             {activeTab === 'all' && (
               <div className="jp-live-summary-bar">
@@ -2062,7 +2302,7 @@ export default function UltimateJetPesaCockpit() {
                 </div>
               </div>
             )}
-            {activeTab === 'all' ? renderLiveBets() : renderMyBets()}
+            {activeTab === 'all' ? renderLiveBets() : activeTab === 'mine' ? renderMyBets() : renderProfileTab()}
           </div>
         </div>
 
@@ -2098,11 +2338,12 @@ export default function UltimateJetPesaCockpit() {
         <button
           onClick={() => {
             setMobileActivePanel('bets');
+            setActiveTab('all');
             setTimeout(() => {
               liveSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 40);
           }}
-          className={`jp-mobile-tab ${mobileActivePanel === 'bets' ? 'jp-active' : ''}`}
+          className={`jp-mobile-tab ${mobileActivePanel === 'bets' && activeTab === 'all' ? 'jp-active' : ''}`}
         >
           <Icon name="bar-chart-3" size={18} />LIVE
         </button>
@@ -2117,7 +2358,21 @@ export default function UltimateJetPesaCockpit() {
         >
           <Icon name="rocket" size={18} />GAME
         </button>
-        <button onClick={() => setMobileActivePanel('chat')} className={`jp-mobile-tab ${mobileActivePanel === 'chat' ? 'jp-active' : ''}`}><Icon name="message-square" size={18} />CHAT</button>
+        <button onClick={() => setMobileActivePanel('chat')} className={`jp-mobile-tab ${mobileActivePanel === 'chat' ? 'jp-active' : ''}`}>
+          <Icon name="message-square" size={18} />CHAT
+        </button>
+        <button
+          onClick={() => {
+            setMobileActivePanel('bets');
+            setActiveTab('profile');
+            setTimeout(() => {
+              liveSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 40);
+          }}
+          className={`jp-mobile-tab ${mobileActivePanel === 'bets' && activeTab === 'profile' ? 'jp-active' : ''}`}
+        >
+          <Icon name="user" size={18} />PROFILE
+        </button>
       </div>
 
       {/* Deposit Modal */}
@@ -2797,6 +3052,407 @@ export default function UltimateJetPesaCockpit() {
         .jp-payout-won { color: #22c55e; }
         .jp-payout-lost { color: #ef4444; }
         .jp-payout-active { color: #38bdf8; }
+
+        /* === DEDICATED PROFILE TAB (Kenyan Market Standard) === */
+        .jp-profile-scroll {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 8px 4px;
+        }
+        .jp-profile-card {
+          background: #11141c;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 12px 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .jp-profile-header-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .jp-profile-avatar-wrap {
+          position: relative;
+          flex-shrink: 0;
+        }
+        .jp-profile-online-badge {
+          position: absolute;
+          bottom: 0;
+          right: 0;
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: #22c55e;
+          border: 2px solid #11141c;
+        }
+        .jp-profile-id-info {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          min-width: 0;
+        }
+        .jp-profile-name-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .jp-profile-main-name {
+          font-size: 15px;
+          font-weight: 900;
+          color: #ffffff;
+        }
+        .jp-bclb-badge {
+          background: rgba(34, 197, 94, 0.15);
+          border: 1px solid rgba(34, 197, 94, 0.35);
+          color: #4ade80;
+          font-size: 9.5px;
+          font-weight: 800;
+          padding: 2px 7px;
+          border-radius: 999px;
+          letter-spacing: 0.04em;
+        }
+        .jp-profile-tags-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 10px;
+          color: #94a3b8;
+          font-weight: 700;
+        }
+        .jp-kyc-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          color: #38bdf8;
+        }
+        .jp-currency-tag {
+          color: #64748b;
+        }
+        .jp-profile-account-id-box {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: rgba(56, 189, 248, 0.06);
+          border: 1px solid rgba(56, 189, 248, 0.2);
+          border-radius: 9px;
+          padding: 8px 12px;
+          margin-top: 4px;
+        }
+        .jp-account-id-label-col {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .jp-account-id-sub {
+          font-size: 9px;
+          color: #64748b;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+        }
+        .jp-account-id-code {
+          font-size: 16px;
+          font-weight: 900;
+          color: #38bdf8;
+          font-family: ui-monospace, SFMono-Regular, monospace;
+          letter-spacing: 0.18em;
+        }
+        .jp-account-id-copy-btn {
+          background: rgba(56, 189, 248, 0.12);
+          border: 1px solid rgba(56, 189, 248, 0.35);
+          color: #38bdf8;
+          border-radius: 8px;
+          padding: 6px 12px;
+          font-size: 11px;
+          font-weight: 800;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          transition: all 0.15s ease;
+        }
+        .jp-account-id-copy-btn.copied {
+          background: rgba(34, 197, 94, 0.2);
+          border-color: #22c55e;
+          color: #22c55e;
+        }
+
+        .jp-card-section-title {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 900;
+          color: #94a3b8;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .jp-wallet-balance-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 6px;
+          background: rgba(0, 0, 0, 0.3);
+          padding: 8px;
+          border-radius: 9px;
+          border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+        .jp-wallet-balance-cell {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .jp-balance-cell-label {
+          font-size: 8.5px;
+          font-weight: 800;
+          color: #64748b;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
+        .jp-balance-cell-val {
+          font-size: 13px;
+          font-weight: 900;
+          color: #cbd5e1;
+        }
+        .jp-green-text {
+          color: #22c55e !important;
+        }
+        .jp-rose-text {
+          color: #f43f5e !important;
+        }
+
+        .jp-profile-wallet-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          margin-top: 4px;
+        }
+        .jp-profile-action-btn {
+          border-radius: 8px;
+          padding: 8px 12px;
+          font-size: 11.5px;
+          font-weight: 800;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          transition: filter 0.15s ease;
+        }
+        .jp-btn-deposit-mpesa {
+          background: linear-gradient(135deg, #16a34a, #15803d);
+          border: 1px solid #22c55e;
+          color: #ffffff;
+        }
+        .jp-btn-withdraw-mpesa {
+          background: rgba(245, 158, 11, 0.12);
+          border: 1px solid rgba(245, 158, 11, 0.35);
+          color: #f59e0b;
+        }
+        .jp-profile-action-btn:hover {
+          filter: brightness(1.1);
+        }
+
+        .jp-input-group-vertical {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .jp-profile-input-label {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 9.5px;
+          font-weight: 800;
+          color: #8e9ba8;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        .jp-mpesa-active-pill {
+          font-size: 9px;
+          color: #22c55e;
+          font-weight: 800;
+        }
+        .jp-phone-input-wrap {
+          display: flex;
+          align-items: center;
+          background: #0b0d13;
+          border: 1px solid #1f2533;
+          border-radius: 8px;
+          overflow: hidden;
+        }
+        .jp-phone-prefix {
+          padding: 8px 10px;
+          background: #141824;
+          color: #8e9ba8;
+          font-size: 12px;
+          font-weight: 800;
+          border-right: 1px solid #1f2533;
+        }
+        .jp-profile-text-input {
+          flex: 1;
+          background: transparent;
+          border: none;
+          color: #f1f5f9;
+          font-size: 13px;
+          font-weight: 700;
+          padding: 8px 10px;
+          outline: none;
+        }
+        .jp-profile-text-input.jp-input-disabled {
+          color: #64748b;
+          cursor: not-allowed;
+          background: #090a0f;
+        }
+        .jp-input-helper-text {
+          font-size: 9px;
+          color: #64748b;
+          line-height: 1.3;
+        }
+
+        .jp-stats-4grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 6px;
+        }
+        .jp-stat-tile {
+          background: rgba(0, 0, 0, 0.35);
+          border: 1px solid rgba(255, 255, 255, 0.04);
+          border-radius: 8px;
+          padding: 8px 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .jp-stat-tile-label {
+          font-size: 8.5px;
+          font-weight: 800;
+          color: #64748b;
+          text-transform: uppercase;
+        }
+        .jp-stat-tile-val {
+          font-size: 13.5px;
+          font-weight: 900;
+          color: #f1f5f9;
+        }
+        .jp-stat-secondary-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .jp-stat-mini-pill {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid rgba(255, 255, 255, 0.04);
+          border-radius: 6px;
+          padding: 5px 8px;
+          font-size: 9.5px;
+          color: #8e9ba8;
+          font-weight: 700;
+        }
+
+        .jp-save-profile-btn {
+          background: linear-gradient(135deg, #0284c7, #0369a1);
+          border: 1px solid #38bdf8;
+          border-radius: 8px;
+          color: #ffffff;
+          padding: 9px 14px;
+          font-size: 12px;
+          font-weight: 800;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          margin-top: 4px;
+          transition: filter 0.15s ease;
+        }
+        .jp-save-profile-btn:hover {
+          filter: brightness(1.1);
+        }
+
+        .jp-bclb-card {
+          border-color: rgba(34, 197, 94, 0.2);
+          background: linear-gradient(180deg, rgba(22, 101, 52, 0.08) 0%, rgba(17, 20, 28, 0.95) 100%);
+        }
+        .jp-bclb-header {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: #4ade80;
+          font-size: 10px;
+          font-weight: 900;
+          letter-spacing: 0.04em;
+        }
+        .jp-bclb-text {
+          margin: 0;
+          font-size: 9.5px;
+          color: #94a3b8;
+          line-height: 1.4;
+        }
+        .jp-bclb-controls {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .jp-limit-chip {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 9.5px;
+          color: #cbd5e1;
+          background: rgba(0, 0, 0, 0.35);
+          padding: 4px 8px;
+          border-radius: 6px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .jp-limit-label {
+          color: #64748b;
+          font-weight: 800;
+        }
+        .jp-limit-val {
+          color: #f1f5f9;
+          font-weight: 900;
+        }
+        .jp-provably-verify-btn {
+          background: rgba(168, 85, 247, 0.12);
+          border: 1px solid rgba(168, 85, 247, 0.35);
+          color: #c084fc;
+          font-size: 9.5px;
+          font-weight: 800;
+          padding: 5px 10px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .jp-provably-verify-btn:hover {
+          background: rgba(168, 85, 247, 0.2);
+        }
+
+        .jp-signout-btn {
+          width: 100%;
+          background: rgba(239, 68, 68, 0.1);
+          border: 1px solid rgba(239, 68, 68, 0.25);
+          color: #f87171;
+          font-size: 11.5px;
+          font-weight: 800;
+          padding: 9px;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .jp-signout-btn:hover {
+          background: rgba(239, 68, 68, 0.2);
+          color: #ef4444;
+        }
 
         .jp-bet-history-row { display: flex; justify-content: space-between; padding: 8px; background: rgba(0,0,0,0.15); border-radius: 8px; margin-bottom: 5px; font-size: 11px; border: 1px solid rgba(255,255,255,0.02); }
         .jp-bet-history-round { color: #64748b; display: block; font-size: 9px; }
