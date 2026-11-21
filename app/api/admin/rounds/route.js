@@ -286,12 +286,75 @@ export async function GET(request) {
       console.warn('Could not load daily stats:', err.message);
     }
 
+    // Fetch platform liabilities (player account balances) and all-time deposits
+    let treasuryStats = {
+      totalUsers: 0,
+      totalLiabilities: 0,
+      allTimeDeposits: 0,
+    };
+
+    try {
+      const usersAgg = await sql.query(`
+        SELECT 
+          COUNT(*)::int AS total_users,
+          COALESCE(SUM(wallet_balance), 0)::numeric AS total_liabilities
+        FROM public.users
+      `);
+      const depositsAllTimeAgg = await sql.query(`
+        SELECT COALESCE(SUM(amount), 0)::numeric AS total
+        FROM public.deposits WHERE status = 'COMPLETED'
+      `);
+      treasuryStats = {
+        totalUsers: Number(usersAgg[0]?.total_users || 0),
+        totalLiabilities: Number(usersAgg[0]?.total_liabilities || 0),
+        allTimeDeposits: Number(depositsAllTimeAgg[0]?.total || 0),
+      };
+    } catch (te) {
+      console.warn('Could not load treasury stats for radar:', te.message);
+    }
+
+    // Compute Daily House Profit Target based on Real Pay-Ins and Player Account Liabilities
+    const currentGlobalTarget = getGlobalProfitTarget();
+    const targetPct = currentGlobalTarget.percent || 50;
+    const depBase = (dailyStats.depositsTotal > 0) ? dailyStats.depositsTotal : treasuryStats.allTimeDeposits;
+    
+    // Pay-ins retention target vs Player wallet funds coverage
+    const targetFromPayIns = depBase * (targetPct / 100);
+    const targetFromLiabilities = treasuryStats.totalLiabilities * (targetPct / 100);
+    
+    // Daily target locks the pay-in margin while ensuring player balance exposure is defended
+    const calculatedDailyTargetKes = Math.round(Math.max(targetFromPayIns, targetFromLiabilities * 0.35, 500));
+    const currentGgr = dailyStats.grossGamingRevenue;
+    const isDailyTargetAchieved = currentGgr >= calculatedDailyTargetKes;
+    const targetProgressPct = Math.min(100, Math.max(0, Math.round((currentGgr / (calculatedDailyTargetKes || 1)) * 100)));
+    const payInRetentionPct = depBase > 0 ? Math.round((currentGgr / depBase) * 100) : 0;
+
+    const houseProfitEngine = {
+      enabled: Boolean(currentGlobalTarget.enabled),
+      targetPercent: targetPct,
+      totalUsers: treasuryStats.totalUsers,
+      totalLiabilities: treasuryStats.totalLiabilities,
+      allTimeDeposits: treasuryStats.allTimeDeposits,
+      todayDeposits: dailyStats.depositsTotal,
+      todayWithdrawals: dailyStats.withdrawalsTotal,
+      todayWagered: dailyStats.wageredTotal,
+      todayWon: dailyStats.wonTotal,
+      todayGgr: currentGgr,
+      calculatedDailyTargetKes,
+      targetProgressPct,
+      isDailyTargetAchieved,
+      payInRetentionPct,
+      depBase,
+    };
+
     return NextResponse.json({
       success: true,
       ...data,
-      globalProfitTarget: getGlobalProfitTarget(),
+      globalProfitTarget: currentGlobalTarget,
       inFlightStats,
       dailyStats,
+      treasuryStats,
+      houseProfitEngine,
     });
   } catch (error) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });

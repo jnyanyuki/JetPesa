@@ -32,6 +32,7 @@ export default function JetPesaAdminPage() {
   const [profitTargetInput, setProfitTargetInput] = useState('50');
   const [profitTargetEnabled, setProfitTargetEnabled] = useState(false);
   const [profitTargetLoading, setProfitTargetLoading] = useState(false);
+  const [houseProfitEngine, setHouseProfitEngine] = useState(null);
 
   const pollTimerRef = useRef(null);
 
@@ -102,6 +103,7 @@ export default function JetPesaAdminPage() {
         setCurrentCycleState(data.currentState || null);
         if (data.inFlightStats) setInFlightStats(data.inFlightStats);
         if (data.dailyStats) setDailyStats(data.dailyStats);
+        if (data.houseProfitEngine) setHouseProfitEngine(data.houseProfitEngine);
         if (data.globalProfitTarget) {
           setProfitTargetEnabled(Boolean(data.globalProfitTarget.enabled));
           if (data.globalProfitTarget.percent !== undefined && data.globalProfitTarget.percent !== null) {
@@ -299,8 +301,9 @@ export default function JetPesaAdminPage() {
   };
 
   // Save / Update Profit Target Percentage across ALL rounds
-  const handleSaveProfitPercent = async () => {
-    const val = parseFloat(profitTargetInput);
+  const handleSaveProfitPercent = async (customVal) => {
+    const rawVal = customVal !== undefined ? customVal : profitTargetInput;
+    const val = parseFloat(rawVal);
     if (isNaN(val) || val < 1 || val > 100) {
       showToast('Please enter a percentage profit target between 1% and 100%.', 'error');
       return;
@@ -313,13 +316,14 @@ export default function JetPesaAdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'setGlobalProfitTarget',
-          enabled: profitTargetEnabled,
+          enabled: true,
           percent: val,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to update profit target.');
-      showToast(`🎯 System Profit Target set to ${val}% across all rounds.`);
+      setProfitTargetEnabled(true);
+      showToast(`🎯 System Profit Target set to ${val}% (calculated from pay-ins & player funds).`);
       await loadRoundsRadar();
     } catch (err) {
       showToast(err.message, 'error');
@@ -563,48 +567,200 @@ export default function JetPesaAdminPage() {
         {/* ================================================================= */}
         {activeTab === 'radar' && (
           <div className="jp-admin-radar-view">
-            {/* Last 5 Crash Points (History) */}
-            <section className="jp-admin-history-strip">
-              <div className="jp-history-strip-header">
-                <div className="jp-history-strip-title">
-                  <span className="jp-history-clock-icon">🕒</span>
-                  <h3>Past Flight Outcomes (Last 5 Crash Points)</h3>
+            {/* TOP ROW: Compact Past Flight Outcomes (Left) + House Profit Engine & Daily Target Calculator (Right) */}
+            <div className="jp-radar-top-grid">
+              {/* Left Column: Compact Past Flight Outcomes (Last 5 Crash Points) */}
+              <section className="jp-admin-history-strip jp-history-compact">
+                <div className="jp-history-strip-header">
+                  <div className="jp-history-strip-title">
+                    <span className="jp-history-clock-icon">🕒</span>
+                    <h3>Past Flight Outcomes (Last 5 Crash Points)</h3>
+                  </div>
+                  <span className="jp-panel-note">Audit Tape</span>
                 </div>
-                <span className="jp-panel-note">Live cryptographic historical audit tape</span>
-              </div>
 
-              {pastRoundsData.length === 0 ? (
-                <div className="jp-history-empty">
-                  <span>Awaiting initial round completions...</span>
-                </div>
-              ) : (
-                <div className="jp-history-cards-grid">
-                  {pastRoundsData.map((pr) => (
-                    <div key={pr.cycleIndex} className={`jp-history-card border-${pr.category.toLowerCase()}`}>
-                      <div className="jp-history-card-top">
-                        <span className="jp-history-round-label">Round #{pr.cycleIndex}</span>
-                        <span className={`jp-cat-badge badge-${pr.category.toLowerCase()}`}>
-                          {pr.category}
-                        </span>
+                {pastRoundsData.length === 0 ? (
+                  <div className="jp-history-empty">
+                    <span>Awaiting initial round completions...</span>
+                  </div>
+                ) : (
+                  <div className="jp-history-cards-grid">
+                    {pastRoundsData.map((pr) => (
+                      <div key={pr.cycleIndex} className={`jp-history-card border-${pr.category.toLowerCase()}`}>
+                        <div className="jp-history-card-top">
+                          <span className="jp-history-round-label">#{pr.cycleIndex}</span>
+                          <span className={`jp-cat-badge badge-${pr.category.toLowerCase()}`}>
+                            {pr.category}
+                          </span>
+                        </div>
+                        <div className="jp-history-card-body">
+                          <span className={`jp-history-mult-num mult-${pr.category.toLowerCase()}`}>
+                            {pr.crashPoint.toFixed(2)}x
+                          </span>
+                        </div>
+                        <div className="jp-history-card-footer">
+                          <span className="jp-history-ago">~{pr.completedAgoSeconds}s ago</span>
+                          {pr.isOverridden ? (
+                            <span className="jp-tag-override-sm">Overridden</span>
+                          ) : (
+                            <span className="jp-tag-natural-sm">Fair</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="jp-history-card-body">
-                        <span className={`jp-history-mult-num mult-${pr.category.toLowerCase()}`}>
-                          {pr.crashPoint.toFixed(2)}x
-                        </span>
-                      </div>
-                      <div className="jp-history-card-footer">
-                        <span className="jp-history-ago">Ended ~{pr.completedAgoSeconds}s ago</span>
-                        {pr.isOverridden ? (
-                          <span className="jp-tag-override-sm">Overridden</span>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* Right Column: House Profit Engine & Daily Target Calculator */}
+              <section className="jp-admin-panel jp-profit-engine-panel">
+                <div className="jp-panel-header">
+                  <div className="jp-history-strip-title">
+                    <span className="jp-history-clock-icon">🛡️</span>
+                    <div>
+                      <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        House Profit Engine & Daily Target
+                        {houseProfitEngine?.enabled ? (
+                          <span className="jp-status-pill pill-live">● ACTIVE LOCK</span>
                         ) : (
-                          <span className="jp-tag-natural-sm">Provably Fair</span>
+                          <span className="jp-status-pill pill-active">○ PASS-THROUGH</span>
                         )}
-                      </div>
+                      </h3>
+                      <span className="jp-panel-note">
+                        Safeguards player account funds & locks real pay-ins retention margin
+                      </span>
                     </div>
-                  ))}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div 
+                      className={`jp-profit-toggle-switch ${profitTargetEnabled ? 'active' : ''}`}
+                      onClick={handleToggleProfitTarget}
+                      title={profitTargetEnabled ? 'Click to disable system profit lock' : 'Click to enable system profit lock'}
+                    >
+                      <div className="jp-toggle-knob" />
+                    </div>
+                    <span className={`jp-profit-toggle-label ${profitTargetEnabled ? 'on' : 'off'}`}>
+                      {profitTargetEnabled ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
                 </div>
-              )}
-            </section>
+
+                {/* 4-Card Relevant Data Financial Grid */}
+                <div className="jp-engine-metrics-grid">
+                  <div className="jp-engine-metric-card">
+                    <span className="jp-engine-metric-label">FUNDS IN PLAYER ACCOUNTS</span>
+                    <span className="jp-engine-metric-val val-blue">
+                      KES {(houseProfitEngine?.totalLiabilities || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="jp-engine-metric-sub">
+                      Across {houseProfitEngine?.totalUsers || 0} registered pilots
+                    </span>
+                  </div>
+
+                  <div className="jp-engine-metric-card">
+                    <span className="jp-engine-metric-label">REAL PAY-INS (DEPOSITS)</span>
+                    <span className="jp-engine-metric-val val-green">
+                      KES {(houseProfitEngine?.todayDeposits || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="jp-engine-metric-sub">
+                      All-Time: KES {(houseProfitEngine?.allTimeDeposits || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="jp-engine-metric-card">
+                    <span className="jp-engine-metric-label">ACHIEVED PROFIT (GGR)</span>
+                    <span className={`jp-engine-metric-val ${(houseProfitEngine?.todayGgr || 0) >= 0 ? 'val-green' : 'val-red'}`}>
+                      {(houseProfitEngine?.todayGgr || 0) >= 0 ? '+' : ''}KES {(houseProfitEngine?.todayGgr || 0).toFixed(2)}
+                    </span>
+                    <span className="jp-engine-metric-sub">
+                      Retention: {houseProfitEngine?.payInRetentionPct || 0}% of pay-ins
+                    </span>
+                  </div>
+
+                  <div className="jp-engine-metric-card highlight-target">
+                    <span className="jp-engine-metric-label">CALCULATED DAILY TARGET</span>
+                    <span className="jp-engine-metric-val val-gold">
+                      KES {(houseProfitEngine?.calculatedDailyTargetKes || 0).toLocaleString()}
+                    </span>
+                    <span className="jp-engine-metric-sub">
+                      Locks {profitTargetInput || 50}% margin on active funds
+                    </span>
+                  </div>
+                </div>
+
+                {/* Target Progress Bar & Lock Status */}
+                <div className="jp-engine-progress-wrap">
+                  <div className="jp-engine-progress-info">
+                    <span className="jp-engine-progress-title">
+                      Daily Target Retention Progress: <strong>{houseProfitEngine?.targetProgressPct || 0}%</strong>
+                    </span>
+                    {houseProfitEngine?.isDailyTargetAchieved ? (
+                      <span className="jp-engine-status-tag tag-secured">✅ TARGET SECURED & LOCKED</span>
+                    ) : houseProfitEngine?.enabled ? (
+                      <span className="jp-engine-status-tag tag-enforcing">⚡ AUTO-ENFORCING VIA ROUND CAPS</span>
+                    ) : (
+                      <span className="jp-engine-status-tag tag-idle">○ TARGET OFF (NATURAL PROVABLY FAIR)</span>
+                    )}
+                  </div>
+                  <div className="jp-engine-progress-bar">
+                    <div 
+                      className={`jp-engine-progress-fill ${houseProfitEngine?.isDailyTargetAchieved ? 'secured' : ''}`}
+                      style={{ width: `${houseProfitEngine?.targetProgressPct || 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Controls: Target Presets, Custom Input & Lock Button */}
+                <div className="jp-engine-controls-bar">
+                  <div className="jp-engine-presets">
+                    <span className="jp-engine-control-label">LOCK PRESETS:</span>
+                    {[
+                      { label: '30% Pay-Ins', val: 30 },
+                      { label: '50% Balanced', val: 50 },
+                      { label: '70% High Ret.', val: 70 },
+                      { label: '85% Defense', val: 85 },
+                    ].map((p) => (
+                      <button
+                        key={p.val}
+                        type="button"
+                        className={`jp-engine-preset-btn ${Number(profitTargetInput) === p.val ? 'active' : ''}`}
+                        onClick={() => {
+                          setProfitTargetInput(String(p.val));
+                          handleSaveProfitPercent(p.val);
+                        }}
+                        disabled={profitTargetLoading}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="jp-engine-input-apply">
+                    <div className="jp-profit-input-wrap">
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={profitTargetInput}
+                        onChange={(e) => setProfitTargetInput(e.target.value)}
+                        className="jp-profit-input"
+                        title="House profit retention percentage applied across all rounds"
+                      />
+                      <span className="jp-profit-currency">%</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="jp-engine-lock-btn"
+                      onClick={() => handleSaveProfitPercent()}
+                      disabled={profitTargetLoading}
+                    >
+                      {profitTargetLoading ? '...' : 'LOCK & APPLY'}
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
 
             {/* Middle Row: Minimized In-Flight Telemetry (Left) + Daily Platform Financials & Pay-Ins/Payouts (Right) */}
             <div className="jp-middle-split-row">
@@ -1509,29 +1665,100 @@ export default function JetPesaAdminPage() {
         .jp-override-trigger-btn { background: linear-gradient(135deg, #e11d48, #be123c); color: #fff; border: none; padding: 7px 14px; border-radius: 8px; font-size: 11.5px; font-weight: 800; cursor: pointer; transition: transform .15s; }
         .jp-override-trigger-btn:hover { transform: translateY(-1px); }
 
-        /* History Strip (Last 5 Crash Points) */
-        .jp-admin-history-strip { background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 14px 18px; margin-bottom: 18px; backdrop-filter: blur(10px); }
-        .jp-history-strip-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+        /* Top Row Split: Compact History (Left) + House Profit Engine & Daily Target (Right) */
+        .jp-radar-top-grid { display: grid; grid-template-columns: 0.9fr 1.35fr; gap: 14px; margin-bottom: 18px; align-items: stretch; }
+        @media (max-width: 1160px) {
+          .jp-radar-top-grid { grid-template-columns: 1fr; }
+        }
+
+        /* History Strip (Last 5 Crash Points) - Compact */
+        .jp-admin-history-strip { background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 12px 14px; backdrop-filter: blur(10px); display: flex; flex-direction: column; justify-content: space-between; }
+        .jp-history-compact { margin-bottom: 0; }
+        .jp-history-strip-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
         .jp-history-strip-title { display: flex; align-items: center; gap: 6px; }
-        .jp-history-strip-title h3 { margin: 0; font-size: 12.5px; font-weight: 800; color: #fff; letter-spacing: 0.02em; }
-        .jp-history-clock-icon { font-size: 13px; }
-        .jp-history-cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-        .jp-history-card { background: rgba(4, 7, 15, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; transition: transform 0.15s, border-color 0.15s; }
+        .jp-history-strip-title h3 { margin: 0; font-size: 11px; font-weight: 800; color: #fff; letter-spacing: 0.02em; }
+        .jp-history-clock-icon { font-size: 11px; }
+        .jp-history-cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 6px; }
+        .jp-history-card { background: rgba(4, 7, 15, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; transition: transform 0.15s, border-color 0.15s; }
         .jp-history-card:hover { transform: translateY(-1px); border-color: rgba(255, 255, 255, 0.2); }
-        .jp-history-card.border-instant { border-left: 3px solid #6b7280; }
-        .jp-history-card.border-low { border-left: 3px solid #60a5fa; }
-        .jp-history-card.border-high { border-left: 3px solid #c084fc; }
-        .jp-history-card.border-mega { border-left: 3px solid #fbbf24; }
+        .jp-history-card.border-instant { border-left: 2.5px solid #6b7280; }
+        .jp-history-card.border-low { border-left: 2.5px solid #60a5fa; }
+        .jp-history-card.border-high { border-left: 2.5px solid #c084fc; }
+        .jp-history-card.border-mega { border-left: 2.5px solid #fbbf24; }
         .jp-history-card.jp-card-live { background: rgba(34, 197, 94, 0.08); border-color: rgba(34, 197, 94, 0.4); box-shadow: 0 0 16px rgba(34, 197, 94, 0.12); }
         .jp-history-card-top { display: flex; align-items: center; justify-content: space-between; }
-        .jp-history-round-label { font-size: 9.5px; font-weight: 800; color: #94a3b8; }
-        .jp-history-card-body { margin: 2px 0; }
-        .jp-history-mult-num { font-size: 20px; font-weight: 950; font-family: system-ui, sans-serif; line-height: 1; }
-        .jp-history-card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 9px; color: #64748b; font-weight: 700; margin-top: 2px; }
-        .jp-history-ago { color: #64748b; font-size: 8.5px; }
-        .jp-tag-override-sm { background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 1px 5px; border-radius: 4px; font-size: 8px; font-weight: 800; }
-        .jp-tag-natural-sm { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 1px 5px; border-radius: 4px; font-size: 8px; font-weight: 700; }
-        .jp-history-empty { text-align: center; padding: 14px; color: #64748b; font-size: 11px; }
+        .jp-history-round-label { font-size: 8px; font-weight: 800; color: #94a3b8; font-family: ui-monospace, monospace; }
+        .jp-history-card-body { margin: 1px 0; }
+        .jp-history-mult-num { font-size: 14.5px; font-weight: 950; font-family: system-ui, sans-serif; line-height: 1; }
+        .jp-history-card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 7.5px; color: #64748b; font-weight: 700; margin-top: 1px; }
+        .jp-history-ago { color: #64748b; font-size: 7px; }
+        .jp-tag-override-sm { background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 1px 4px; border-radius: 3px; font-size: 7px; font-weight: 800; }
+        .jp-tag-natural-sm { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 1px 4px; border-radius: 3px; font-size: 7px; font-weight: 700; }
+        .jp-history-empty { text-align: center; padding: 12px; color: #64748b; font-size: 10px; }
+
+        /* House Profit Engine & Daily Target Calculator Panel (Right of History) */
+        .jp-profit-engine-panel {
+          background: radial-gradient(circle at top right, rgba(16, 185, 129, 0.06) 0%, rgba(15, 23, 42, 0.85) 100%);
+          border: 1px solid rgba(16, 185, 129, 0.28);
+          border-radius: 14px;
+          padding: 12px 16px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          gap: 7px;
+          backdrop-filter: blur(10px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+        .jp-engine-metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        @media (max-width: 768px) {
+          .jp-engine-metrics-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .jp-engine-metric-card { background: rgba(4, 7, 15, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; }
+        .jp-engine-metric-card.highlight-target { border-color: rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.05); }
+        .jp-engine-metric-label { font-size: 7.5px; font-weight: 800; color: #94a3b8; letter-spacing: 0.04em; margin-bottom: 2px; }
+        .jp-engine-metric-val { font-size: 13.5px; font-weight: 950; font-family: ui-monospace, monospace; line-height: 1.1; }
+        .jp-engine-metric-sub { font-size: 7.5px; color: #64748b; font-weight: 700; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        .val-blue { color: #38bdf8; }
+        .val-green { color: #34d399; }
+        .val-gold { color: #fbbf24; }
+        .val-red { color: #f43f5e; }
+
+        .jp-engine-progress-wrap { background: rgba(4, 7, 15, 0.5); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 6px 10px; }
+        .jp-engine-progress-info { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: 8.5px; }
+        .jp-engine-progress-title { color: #cbd5e1; font-weight: 800; }
+        .jp-engine-progress-title strong { color: #38bdf8; font-family: ui-monospace, monospace; font-size: 9.5px; }
+        .jp-engine-status-tag { font-size: 7.5px; font-weight: 900; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.03em; }
+        .jp-engine-status-tag.tag-secured { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+        .jp-engine-status-tag.tag-enforcing { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); animation: jpBlink 1.6s infinite; }
+        .jp-engine-status-tag.tag-idle { background: rgba(255, 255, 255, 0.05); color: #64748b; border: 1px solid rgba(255, 255, 255, 0.08); }
+        
+        .jp-engine-progress-bar { width: 100%; height: 5px; background: #0b1120; border-radius: 999px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.06); }
+        .jp-engine-progress-fill { height: 100%; background: linear-gradient(90deg, #0284c7, #10b981); border-radius: 999px; transition: width 0.35s ease; }
+        .jp-engine-progress-fill.secured { background: linear-gradient(90deg, #10b981, #059669); box-shadow: 0 0 8px #10b981; }
+
+        .jp-engine-controls-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+        .jp-engine-presets { display: flex; align-items: center; gap: 3px; }
+        .jp-engine-control-label { font-size: 8px; font-weight: 900; color: #64748b; letter-spacing: 0.05em; margin-right: 2px; }
+        .jp-engine-preset-btn { background: #111827; border: 1px solid rgba(255, 255, 255, 0.1); color: #94a3b8; font-size: 8px; font-weight: 800; padding: 2px 5px; border-radius: 4px; cursor: pointer; transition: all 0.12s; }
+        .jp-engine-preset-btn.active { background: #1e293b; color: #38bdf8; border-color: #38bdf8; }
+        .jp-engine-preset-btn:hover { color: #fff; border-color: rgba(56, 189, 248, 0.4); }
+        .jp-engine-input-apply { display: flex; align-items: center; gap: 4px; }
+        .jp-engine-lock-btn {
+          background: linear-gradient(135deg, #059669, #10b981);
+          color: #fff;
+          border: none;
+          padding: 3px 8px;
+          border-radius: 4px;
+          font-size: 8.5px;
+          font-weight: 900;
+          cursor: pointer;
+          transition: all 0.15s;
+          box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+          white-space: nowrap;
+        }
+        .jp-engine-lock-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(16, 185, 129, 0.45); }
+        .jp-engine-lock-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* Middle Row: Side-by-side split (In-Flight Minimized + Daily Financials) */
         .jp-middle-split-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; align-items: stretch; }
