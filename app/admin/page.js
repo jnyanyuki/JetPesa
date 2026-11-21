@@ -542,25 +542,6 @@ export default function JetPesaAdminPage() {
             </span>
           </div>
 
-          {/* Quick Customization Presets */}
-          <div className="jp-round-profit-presets">
-            {[25, 50, 75, 100].map((pct) => (
-              <button
-                key={pct}
-                type="button"
-                className={`jp-round-preset-btn ${Number(roundProfitInput) === pct ? 'active' : ''}`}
-                onClick={() => {
-                  setRoundProfitInput(String(pct));
-                  handleSaveRoundProfit(pct);
-                }}
-                disabled={roundProfitLoading}
-                title={`Quick customize round profit target to ${pct}%`}
-              >
-                {pct}%
-              </button>
-            ))}
-          </div>
-
           {/* Percentage Target Input & Set Button */}
           <div className="jp-profit-input-group">
             <div className="jp-profit-input-wrap">
@@ -568,8 +549,8 @@ export default function JetPesaAdminPage() {
                 type="number"
                 min="1"
                 max="100"
-                step="5"
-                placeholder="50"
+                step="0.1"
+                placeholder="e.g. 42.5"
                 value={roundProfitInput}
                 onChange={(e) => setRoundProfitInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSaveRoundProfit(); }}
@@ -879,28 +860,9 @@ export default function JetPesaAdminPage() {
 
                 {/* Controls: Target Presets, Custom Input & Lock Button */}
                 <div className="jp-engine-controls-bar">
-                  <div className="jp-engine-presets">
-                    <span className="jp-engine-control-label">LOCK PRESETS:</span>
-                    {[
-                      { label: '30% Pay-Ins', val: 30 },
-                      { label: '50% Balanced', val: 50 },
-                      { label: '70% High Ret.', val: 70 },
-                      { label: '85% Defense', val: 85 },
-                    ].map((p) => (
-                      <button
-                        key={p.val}
-                        type="button"
-                        className={`jp-engine-preset-btn ${Number(dailyTargetInput) === p.val ? 'active' : ''}`}
-                        onClick={() => {
-                          setDailyTargetInput(String(p.val));
-                          handleSaveDailyTarget(p.val);
-                        }}
-                        disabled={dailyTargetLoading}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
+                  <span className="jp-engine-control-label">
+                    CUSTOM DAILY RETENTION TARGET (1% – 100%, decimals allowed):
+                  </span>
 
                   <div className="jp-engine-input-apply">
                     <div className="jp-profit-input-wrap">
@@ -908,8 +870,11 @@ export default function JetPesaAdminPage() {
                         type="number"
                         min="1"
                         max="100"
+                        step="0.1"
+                        placeholder="e.g. 37.5"
                         value={dailyTargetInput}
                         onChange={(e) => setDailyTargetInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveDailyTarget(); }}
                         className="jp-profit-input"
                         title="Daily profit retention percentage applied to deposits and player funds"
                       />
@@ -1696,10 +1661,6 @@ export default function JetPesaAdminPage() {
         .jp-profit-toggle-label.on { color: #34d399; }
         .jp-profit-toggle-label.off { color: #64748b; }
 
-        .jp-round-profit-presets { display: flex; align-items: center; gap: 3px; }
-        .jp-round-preset-btn { background: #0c1322; border: 1px solid rgba(255, 255, 255, 0.1); color: #94a3b8; font-size: 8px; font-weight: 800; padding: 2px 5px; border-radius: 4px; cursor: pointer; transition: all 0.12s; }
-        .jp-round-preset-btn.active { background: #1e293b; color: #34d399; border-color: #34d399; }
-        .jp-round-preset-btn:hover { color: #fff; border-color: rgba(52, 211, 153, 0.4); }
 
         .jp-profit-input-group { display: flex; align-items: center; gap: 4px; }
         .jp-profit-input-wrap { display: flex; align-items: center; background: #040814; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 5px; padding: 2px 6px; gap: 3px; }
@@ -1855,11 +1816,7 @@ export default function JetPesaAdminPage() {
         .jp-engine-progress-fill.secured { background: linear-gradient(90deg, #10b981, #059669); box-shadow: 0 0 8px #10b981; }
 
         .jp-engine-controls-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-        .jp-engine-presets { display: flex; align-items: center; gap: 3px; }
         .jp-engine-control-label { font-size: 8px; font-weight: 900; color: #64748b; letter-spacing: 0.05em; margin-right: 2px; }
-        .jp-engine-preset-btn { background: #111827; border: 1px solid rgba(255, 255, 255, 0.1); color: #94a3b8; font-size: 8px; font-weight: 800; padding: 2px 5px; border-radius: 4px; cursor: pointer; transition: all 0.12s; }
-        .jp-engine-preset-btn.active { background: #1e293b; color: #38bdf8; border-color: #38bdf8; }
-        .jp-engine-preset-btn:hover { color: #fff; border-color: rgba(56, 189, 248, 0.4); }
         .jp-engine-input-apply { display: flex; align-items: center; gap: 4px; }
         .jp-engine-lock-btn {
           background: linear-gradient(135deg, #059669, #10b981);
