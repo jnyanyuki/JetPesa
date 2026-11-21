@@ -250,6 +250,8 @@ export default function UltimateJetPesaCockpit() {
   const [provablyLoading, setProvablyLoading] = useState(false);
 
   const canvasRef = useRef(null);
+  const centerPanelRef = useRef(null);
+  const liveSectionRef = useRef(null);
   const animationId = useRef(null);
   const chatEndRef = useRef(null);
   const audioCtxRef = useRef(null);
@@ -1628,64 +1630,11 @@ export default function UltimateJetPesaCockpit() {
 
       {/* Main Layout */}
       <div className="jp-layout">
-        <div className="jp-panel jp-left-panel" data-active={mobileActivePanel === 'bets'}>
-          <div className="jp-tab-bar">
-            <button onClick={() => setActiveTab('all')} className={`jp-tab ${activeTab === 'all' ? 'jp-active' : ''}`}>
-              <span className="jp-live-dot-pulse" />
-              LIVE ({lobbyOnlineCount.toLocaleString()})
-            </button>
-            <button onClick={() => setActiveTab('mine')} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>MY BETS</button>
-          </div>
-          {activeTab === 'all' && (
-            <div className="jp-live-summary-bar">
-              <div className="jp-live-summary-card">
-                <div className="jp-live-summary-header">
-                  <span className="jp-live-summary-dot jp-dot-pilots" />
-                  <span className="jp-live-summary-label">IN FLIGHT</span>
-                </div>
-                <span className="jp-live-summary-value jp-val-pilots">
-                  {displayActivePlayers.toLocaleString()}
-                </span>
-              </div>
-              <div className="jp-live-summary-divider" />
-              <div className="jp-live-summary-card">
-                <div className="jp-live-summary-header">
-                  <span className="jp-live-summary-dot jp-dot-placed" />
-                  <span className="jp-live-summary-label">TOTAL PLACED</span>
-                </div>
-                <span className="jp-live-summary-value jp-val-placed">
-                  KES {totalLivePlaced.toLocaleString()}
-                </span>
-              </div>
-              <div className="jp-live-summary-divider" />
-              <div className="jp-live-summary-card">
-                <div className="jp-live-summary-header">
-                  <span className="jp-live-summary-dot jp-dot-won" />
-                  <span className="jp-live-summary-label">TOTAL WON</span>
-                </div>
-                <span className="jp-live-summary-value jp-val-won">
-                  KES {totalLiveWon.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          )}
-          {activeTab === 'all' ? renderLiveBets() : (
-            <div className="jp-panel-scroll">
-              {myBetsHistory.length === 0 ? (
-                <div className="jp-empty-state"><Icon name="bar-chart-3" size={32} /><strong>No local round wagers recorded.</strong></div>
-              ) : (
-                myBetsHistory.map((m, i) => (
-                  <div key={i} className="jp-bet-history-row">
-                    <div><span className="jp-bet-history-round">ROUND #{m.roundId}</span><span className="jp-bet-history-stake">{m.stake} KES</span></div>
-                    <div style={{ textAlign: 'right' }}><span className="jp-bet-history-mult">{m.multiplier.toFixed(2)}x</span><span className="jp-bet-history-yield">+{m.yieldAmount.toFixed(1)}</span></div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="jp-center-panel" data-active={mobileActivePanel === 'game'}>
+        <div
+          ref={centerPanelRef}
+          className="jp-center-panel"
+          data-active={mobileActivePanel === 'game' || mobileActivePanel === 'bets'}
+        >
           <div className="jp-canvas-container">
             {gameStatus === 'idle' && (
               <div className="jp-idle-overlay">
@@ -1723,9 +1672,69 @@ export default function UltimateJetPesaCockpit() {
               </div>
             )}
           </div>
+
+          {/* Two Betting Decks (Deck A & Deck B) */}
           <div className="jp-deck-grid">
             {renderDeckPanel('A', deckA, setDeckA, '#22c55e')}
             {renderDeckPanel('B', deckB, setDeckB, '#16a34a')}
+          </div>
+
+          {/* LIVE Section Directly Below the GAME Two Decks Section */}
+          <div ref={liveSectionRef} className="jp-panel jp-live-below-decks">
+            <div className="jp-tab-bar">
+              <button onClick={() => setActiveTab('all')} className={`jp-tab ${activeTab === 'all' ? 'jp-active' : ''}`}>
+                <span className="jp-live-dot-pulse" />
+                LIVE ({lobbyOnlineCount.toLocaleString()})
+              </button>
+              <button onClick={() => setActiveTab('mine')} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>MY BETS</button>
+            </div>
+            {activeTab === 'all' && (
+              <div className="jp-live-summary-bar">
+                <div className="jp-live-summary-card">
+                  <div className="jp-live-summary-header">
+                    <span className="jp-live-summary-dot jp-dot-pilots" />
+                    <span className="jp-live-summary-label">IN FLIGHT</span>
+                  </div>
+                  <span className="jp-live-summary-value jp-val-pilots">
+                    {displayActivePlayers.toLocaleString()}
+                  </span>
+                </div>
+                <div className="jp-live-summary-divider" />
+                <div className="jp-live-summary-card">
+                  <div className="jp-live-summary-header">
+                    <span className="jp-live-summary-dot jp-dot-placed" />
+                    <span className="jp-live-summary-label">TOTAL PLACED</span>
+                  </div>
+                  <span className="jp-live-summary-value jp-val-placed">
+                    KES {totalLivePlaced.toLocaleString()}
+                  </span>
+                </div>
+                <div className="jp-live-summary-divider" />
+                <div className="jp-live-summary-card">
+                  <div className="jp-live-summary-header">
+                    <span className="jp-live-summary-dot jp-dot-won" />
+                    <span className="jp-live-summary-label">TOTAL WON</span>
+                  </div>
+                  <span className="jp-live-summary-value jp-val-won">
+                    KES {totalLiveWon.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
+            {activeTab === 'all' ? renderLiveBets() : (
+              <div className="jp-panel-scroll">
+                {myBetsHistory.length === 0 ? (
+                  <div className="jp-empty-state"><Icon name="bar-chart-3" size={32} /><strong>No local round wagers recorded.</strong></div>
+                ) : (
+                  myBetsHistory.map((m, i) => (
+                    <div key={i} className="jp-bet-history-row">
+                      <div><span className="jp-bet-history-round">ROUND #{m.roundId}</span><span className="jp-bet-history-stake">{m.stake} KES</span></div>
+                      <div style={{ textAlign: 'right' }}><span className="jp-bet-history-mult">{m.multiplier.toFixed(2)}x</span><span className="jp-bet-history-yield">+{m.yieldAmount.toFixed(1)}</span></div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1758,8 +1767,28 @@ export default function UltimateJetPesaCockpit() {
 
       {/* Mobile Footer */}
       <div className="jp-mobile-footer">
-        <button onClick={() => setMobileActivePanel('bets')} className={`jp-mobile-tab ${mobileActivePanel === 'bets' ? 'jp-active' : ''}`}><Icon name="bar-chart-3" size={18} />LIVE</button>
-        <button onClick={() => setMobileActivePanel('game')} className={`jp-mobile-tab ${mobileActivePanel === 'game' ? 'jp-active' : ''}`}><Icon name="rocket" size={18} />GAME</button>
+        <button
+          onClick={() => {
+            setMobileActivePanel('bets');
+            setTimeout(() => {
+              liveSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 40);
+          }}
+          className={`jp-mobile-tab ${mobileActivePanel === 'bets' ? 'jp-active' : ''}`}
+        >
+          <Icon name="bar-chart-3" size={18} />LIVE
+        </button>
+        <button
+          onClick={() => {
+            setMobileActivePanel('game');
+            setTimeout(() => {
+              centerPanelRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+            }, 40);
+          }}
+          className={`jp-mobile-tab ${mobileActivePanel === 'game' ? 'jp-active' : ''}`}
+        >
+          <Icon name="rocket" size={18} />GAME
+        </button>
         <button onClick={() => setMobileActivePanel('chat')} className={`jp-mobile-tab ${mobileActivePanel === 'chat' ? 'jp-active' : ''}`}><Icon name="message-square" size={18} />CHAT</button>
       </div>
 
@@ -2115,7 +2144,7 @@ export default function UltimateJetPesaCockpit() {
         .jp-layout {
           flex: 1;
           display: grid;
-          grid-template-columns: 300px minmax(0, 1fr) 300px;
+          grid-template-columns: minmax(0, 1fr) 310px;
           padding: 12px;
           gap: 12px;
           box-sizing: border-box;
@@ -2131,6 +2160,12 @@ export default function UltimateJetPesaCockpit() {
           height: 100%;
           min-height: 0;
           overflow: hidden;
+        }
+        .jp-live-below-decks {
+          flex: 1 0 auto;
+          height: auto;
+          min-height: 360px;
+          max-height: 520px;
         }
         .jp-panel-scroll {
           flex: 1;
@@ -2278,11 +2313,28 @@ export default function UltimateJetPesaCockpit() {
         .jp-bet-history-yield { color: #94a3b8; font-size: 10px; }
 
         /* === CENTER PANEL === */
-        .jp-center-panel { display: flex; flex-direction: column; gap: 10px; height: 100%; min-height: 0; }
+        .jp-center-panel {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          height: 100%;
+          min-height: 0;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding-right: 2px;
+        }
+        .jp-center-panel::-webkit-scrollbar { width: 5px; }
+        .jp-center-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
         .jp-canvas-container {
-          flex: 1; background: #020306; border-radius: 16px;
-          border: 1px solid rgba(255,255,255,0.05); position: relative;
-          overflow: hidden; min-height: 0; box-shadow: inset 0 0 40px rgba(0,0,0,0.9);
+          flex: 0 0 auto;
+          height: clamp(230px, 36vh, 340px);
+          min-height: 220px;
+          background: #020306;
+          border-radius: 16px;
+          border: 1px solid rgba(255,255,255,0.05);
+          position: relative;
+          overflow: hidden;
+          box-shadow: inset 0 0 40px rgba(0,0,0,0.9);
         }
         .jp-idle-overlay {
           position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(15,23,42,0.95) 0%, rgba(2,6,23,0.98) 100%);
@@ -2442,7 +2494,7 @@ export default function UltimateJetPesaCockpit() {
 
         /* === RESPONSIVE: MEDIUM DESKTOP === */
         @media (max-width: 1180px) {
-          .jp-layout { grid-template-columns: 250px minmax(0,1fr) 250px !important; gap: 10px !important; padding: 10px !important; }
+          .jp-layout { grid-template-columns: minmax(0,1fr) 270px !important; gap: 10px !important; padding: 10px !important; }
         }
 
         /* === RESPONSIVE: TABLET === */
@@ -2454,15 +2506,15 @@ export default function UltimateJetPesaCockpit() {
             overflow: hidden !important;
           }
           .jp-mobile-footer { display: flex !important; }
-          .jp-left-panel, .jp-center-panel, .jp-right-panel { display: none !important; }
-          .jp-left-panel[data-active="true"],
+          .jp-center-panel, .jp-right-panel { display: none !important; }
           .jp-center-panel[data-active="true"],
           .jp-right-panel[data-active="true"] {
             display: flex !important;
             height: 100% !important;
           }
-          .jp-canvas-container { min-height: 220px !important; flex: 1 1 auto !important; }
-          .jp-deck-grid { max-height: 240px !important; padding: 6px !important; gap: 6px !important; }
+          .jp-canvas-container { height: 225px !important; min-height: 215px !important; flex: 0 0 auto !important; }
+          .jp-deck-grid { max-height: none !important; padding: 6px !important; gap: 6px !important; flex-shrink: 0 !important; }
+          .jp-live-below-decks { min-height: 340px !important; max-height: 480px !important; flex-shrink: 0 !important; }
           .jp-deck-panel { padding: 6px !important; gap: 6px !important; }
           .jp-bet-button, .jp-cashout-button { padding: 8px 4px !important; min-height: 52px !important; font-size: 12px !important; }
           .jp-header { flex-wrap: wrap; padding: 8px 10px !important; }
