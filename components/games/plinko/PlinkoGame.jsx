@@ -93,6 +93,7 @@ export default function PlinkoGame({
   const [recentDrops, setRecentDrops] = useState([]);
   const [totalDropsCount, setTotalDropsCount] = useState(0);
   const [activeBallsCount, setActiveBallsCount] = useState(0);
+  const [activeHitBin, setActiveHitBin] = useState(null);
 
   // Provably Fair Modal
   const [provablyModalData, setProvablyModalData] = useState(null);
@@ -127,14 +128,14 @@ export default function PlinkoGame({
   // Compute Pin Positions on Canvas resize or row change
   const computePinLayout = useCallback((width, height, rowCount) => {
     const pins = [];
-    const topMargin = 50;
-    const bottomMargin = 70;
+    const topMargin = 38;
+    const bottomMargin = 68; // Reserve bottom area for multiplier boxes
     const availableHeight = height - topMargin - bottomMargin;
     const rowSpacing = availableHeight / rowCount;
 
     for (let r = 0; r < rowCount; r++) {
       const pinCount = r + 3;
-      const pinSpacing = Math.min(rowSpacing * 1.15, (width * 0.88) / (rowCount + 3));
+      const pinSpacing = Math.min(rowSpacing * 1.15, (width * 0.90) / (rowCount + 3));
       const rowWidth = (pinCount - 1) * pinSpacing;
       const startX = (width - rowWidth) / 2;
       const y = topMargin + r * rowSpacing;
@@ -159,8 +160,9 @@ export default function PlinkoGame({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width || 500;
+    const height = rect.height || 480;
     const now = performance.now();
 
     ctx.clearRect(0, 0, width, height);
@@ -188,48 +190,60 @@ export default function PlinkoGame({
     });
     ctx.shadowBlur = 0;
 
-    // 2. Draw Multiplier Bins at Bottom
-    const binCount = rows + 1;
-    const bottomMargin = 70;
-    const binHeight = 32;
-    const binY = height - bottomMargin + 20;
+    // 2. Draw Multiplier Bins at Bottom of Canvas
     const pinsLastRow = pins.filter((p) => p.row === rows - 1);
+    const lastRowY = pinsLastRow.length > 0 ? pinsLastRow[0].y : (height - 50);
+    const binY = lastRowY + 14;
+    const binHeight = 28;
 
     if (pinsLastRow.length >= 2) {
-      const startX = pinsLastRow[0].x;
-      const endX = pinsLastRow[pinsLastRow.length - 1].x;
-      const totalBinWidth = endX - startX;
-      const binWidth = totalBinWidth / (binCount - 1);
-
       multipliers.forEach((mult, i) => {
-        const binX = startX + i * binWidth - binWidth / 2;
+        const pLeft = pinsLastRow[i];
+        const pRight = pinsLastRow[i + 1];
+        if (!pLeft || !pRight) return;
+
+        const binCenterX = (pLeft.x + pRight.x) / 2;
+        const binWidth = (pRight.x - pLeft.x) - 3;
+        const bx = binCenterX - binWidth / 2;
+        const by = binY;
+        const bw = binWidth;
+        const bh = binHeight;
+
         const bounceTime = binBounceRef.current.get(i) || 0;
         const timeSinceBounce = now - bounceTime;
-        const isBouncing = timeSinceBounce < 300;
-        const offsetY = isBouncing ? Math.sin((timeSinceBounce / 300) * Math.PI) * 6 : 0;
+        const isBouncing = timeSinceBounce < 320;
+        const offsetY = isBouncing ? Math.sin((timeSinceBounce / 320) * Math.PI) * 7 : 0;
 
-        const binColor = getBinColor(mult, i, binCount);
+        const binColor = getBinColor(mult, i, multipliers.length);
 
         ctx.save();
         ctx.translate(0, offsetY);
+
+        // Glow when bouncing
+        if (isBouncing) {
+          ctx.shadowColor = binColor;
+          ctx.shadowBlur = 14;
+        }
 
         // Bin background
         ctx.fillStyle = isBouncing ? '#ffffff' : binColor;
         ctx.beginPath();
         const r = 4;
-        const bx = binX + 2;
-        const by = binY;
-        const bw = binWidth - 4;
-        const bh = binHeight;
         ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, r) : ctx.rect(bx, by, bw, bh);
         ctx.fill();
 
+        // 3D Top bevel highlight
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.fillRect(bx + 1, by + 1, bw - 2, 2);
+
         // Multiplier Text
         ctx.fillStyle = isBouncing ? '#090d16' : '#ffffff';
-        ctx.font = 'bold 10px monospace';
+        const fontSize = bw < 22 ? 8 : bw < 28 ? 9 : 10.5;
+        ctx.font = `900 ${fontSize}px monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`${mult}x`, bx + bw / 2, by + bh / 2);
+        const label = mult >= 100 ? `${Math.round(mult)}` : `${mult}`;
+        ctx.fillText(`${label}x`, binCenterX, by + bh / 2 + 1);
 
         ctx.restore();
       });
@@ -257,11 +271,19 @@ export default function PlinkoGame({
         const fromPin = rowPins[currentPinIdx] || rowPins[0];
 
         // Next pin target based on binary deflection
-        const nextCol = currentPinIdx + stepDir;
-        const toPin = nextRowPins[nextCol] || {
-          x: fromPin.x + (stepDir === 1 ? 14 : -14),
-          y: fromPin.y + 24,
-        };
+        let toPin = null;
+        if (currentRow === rows - 1) {
+          const pL = pinsLastRow[ball.binIndex];
+          const pR = pinsLastRow[ball.binIndex + 1];
+          const targetX = pL && pR ? (pL.x + pR.x) / 2 : fromPin.x;
+          toPin = { x: targetX, y: binY + 4 };
+        } else {
+          const nextCol = currentPinIdx + stepDir;
+          toPin = nextRowPins[nextCol] || {
+            x: fromPin.x + (stepDir === 1 ? 14 : -14),
+            y: fromPin.y + 24,
+          };
+        }
 
         // Hermite / Bezier trajectory with deflection arc
         const midX = (fromPin.x + toPin.x) / 2 + (stepDir === 1 ? 4 : -4);
@@ -273,7 +295,7 @@ export default function PlinkoGame({
         // Hit pin trigger
         if (frac > 0.85 && !ball.hitPins.has(currentRow)) {
           ball.hitPins.add(currentRow);
-          ball.currentCol = nextCol;
+          ball.currentCol = ball.currentCol + stepDir;
           const pinIdx = pins.findIndex((p) => p.row === currentRow && p.col === currentPinIdx);
           if (pinIdx !== -1) {
             pinHitTimesRef.current.set(pinIdx, now);
@@ -295,6 +317,8 @@ export default function PlinkoGame({
       } else {
         // Ball reached landing bin!
         binBounceRef.current.set(ball.binIndex, now);
+        setActiveHitBin(ball.binIndex);
+        setTimeout(() => setActiveHitBin((prev) => (prev === ball.binIndex ? null : prev)), 350);
 
         if (ball.multiplier >= 10) {
           playPlinkoSound('jackpot');
@@ -337,10 +361,13 @@ export default function PlinkoGame({
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
       const ctx = canvas.getContext('2d');
-      if (ctx) ctx.scale(dpr, dpr);
+      if (ctx) {
+        ctx.resetTransform?.();
+        ctx.scale(dpr, dpr);
+      }
 
       pinsRef.current = computePinLayout(rect.width, rect.height, rows);
     };
@@ -494,6 +521,29 @@ export default function PlinkoGame({
         {/* Plinko Peg Board Canvas */}
         <div className="jp-canvas-box">
           <canvas ref={canvasRef} className="jp-plinko-canvas" />
+
+          {/* Visual Multipliers Strip at the bottom of the dropping area */}
+          <div className="jp-plinko-bins-strip">
+            {multipliers.map((mult, idx) => {
+              const binColor = getBinColor(mult, idx, multipliers.length);
+              const isHit = activeHitBin === idx;
+              return (
+                <div
+                  key={`${rows}-${risk}-${idx}`}
+                  className={`jp-plinko-bin-pill ${isHit ? 'jp-bin-pill-hit' : ''}`}
+                  style={{
+                    background: isHit ? '#ffffff' : binColor,
+                    color: isHit ? '#090d16' : '#ffffff',
+                    boxShadow: isHit
+                      ? `0 0 16px ${binColor}, 0 4px 10px rgba(0,0,0,0.5)`
+                      : `0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.35)`,
+                  }}
+                >
+                  <span className="jp-bin-pill-text">{mult >= 100 ? `${Math.round(mult)}` : `${mult}`}x</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Controls Sidebar */}
@@ -711,9 +761,9 @@ export default function PlinkoGame({
         .jp-canvas-box {
           position: relative;
           width: 100%;
-          height: 480px;
+          height: 500px;
           background: radial-gradient(circle at 50% 20%, #1e293b 0%, #090d16 90%);
-          border: 1px solid rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 12px;
           overflow: hidden;
           box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.7);
@@ -723,6 +773,52 @@ export default function PlinkoGame({
           width: 100%;
           height: 100%;
           display: block;
+        }
+
+        /* Bottom Visual Multipliers Strip */
+        .jp-plinko-bins-strip {
+          position: absolute;
+          bottom: 10px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: calc(100% - 20px);
+          max-width: 580px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+          z-index: 10;
+          pointer-events: none;
+        }
+
+        .jp-plinko-bin-pill {
+          flex: 1;
+          min-width: 0;
+          height: 28px;
+          border-radius: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: 'JetBrains Mono', monospace, ui-monospace;
+          font-size: 11px;
+          font-weight: 900;
+          color: #ffffff;
+          transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.18s ease;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          user-select: none;
+        }
+
+        .jp-bin-pill-hit {
+          transform: translateY(4px) scale(1.08);
+          background: #ffffff !important;
+          color: #090d16 !important;
+        }
+
+        .jp-bin-pill-text {
+          font-size: 10px;
+          letter-spacing: -0.3px;
         }
 
         /* Controls Sidebar */
