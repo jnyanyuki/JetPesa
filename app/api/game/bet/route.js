@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { withTransaction } from '../../../../lib/db';
 import { getAuthSession } from '../../../../lib/auth/server';
 import { getCycleState } from '../../../../lib/gameEngine';
+import { evaluateAndEnforceProfitTarget } from '../../../../lib/profitTargetEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -130,6 +131,13 @@ export async function POST(request) {
         message: `Wager of KES ${amt} placed for round #${targetCycle}.`,
       };
     });
+
+    // If house profit target is configured for this round, re-evaluate and enforce crash ceiling
+    try {
+      evaluateAndEnforceProfitTarget(targetCycle).catch((err) =>
+        console.warn('Background profit target eval on bet failed:', err.message)
+      );
+    } catch {}
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {

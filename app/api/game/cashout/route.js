@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { withTransaction } from '../../../../lib/db';
 import { getAuthSession } from '../../../../lib/auth/server';
 import { getCycleState } from '../../../../lib/gameEngine';
+import { evaluateAndEnforceProfitTarget } from '../../../../lib/profitTargetEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -134,6 +135,13 @@ export async function POST(request) {
         message: `Cashout successful! Won KES ${winAmount.toFixed(2)} @ ${cashoutMultiplier.toFixed(2)}x.`,
       };
     });
+
+    // If profit target is active for current round, re-evaluate remaining budget
+    try {
+      evaluateAndEnforceProfitTarget(state.cycleIndex).catch((err) =>
+        console.warn('Background profit target eval on cashout failed:', err.message)
+      );
+    } catch {}
 
     return NextResponse.json(outcome || { success: false, message: 'Cashout could not be processed.' }, { status: 200 });
   } catch (error) {
