@@ -63,6 +63,10 @@ function Icon({ name, size = 18, className = '', style = {} }) {
       return <svg {...props}><path d="M5 12h14" /><path d="M12 5v14" /></svg>;
     case 'minus':
       return <svg {...props}><path d="M5 12h14" /></svg>;
+    case 'plus-circle':
+      return <svg {...props}><circle cx="12" cy="12" r="10" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>;
+    case 'minus-circle':
+      return <svg {...props}><circle cx="12" cy="12" r="10" /><path d="M8 12h8" /></svg>;
     case 'x':
       return <svg {...props}><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>;
     case 'check':
@@ -147,7 +151,7 @@ export default function UltimateJetPesaCockpit() {
   const [loadingWithdraw, setLoadingWithdraw] = useState(false);
 
   const [deckA, setDeckA] = useState({
-    wager: 50,
+    wager: 10,
     isAuto: false,
     isAutoBet: false,
     isAutoCash: false,
@@ -158,7 +162,7 @@ export default function UltimateJetPesaCockpit() {
   });
 
   const [deckB, setDeckB] = useState({
-    wager: 500,
+    wager: 10,
     isAuto: false,
     isAutoBet: false,
     isAutoCash: false,
@@ -1338,7 +1342,7 @@ export default function UltimateJetPesaCockpit() {
         },
         body: JSON.stringify({
           deck: deckName,
-          wager: state.wager,
+          wager: Math.max(MIN_WAGER, Number(state.wager) || MIN_WAGER),
           autoCashout: autoCash,
           roundId: currentRoundRef.current.nonce,
         }),
@@ -1762,27 +1766,46 @@ export default function UltimateJetPesaCockpit() {
             <div className="jp-stepper-box">
               <button
                 type="button"
-                onClick={() => setter((p) => ({ ...p, wager: Math.max(MIN_WAGER, p.wager - MIN_WAGER) }))}
+                onClick={() => setter((p) => {
+                  const cur = Number(p.wager) || MIN_WAGER;
+                  return { ...p, wager: Math.max(MIN_WAGER, cur - 10) };
+                })}
                 className="jp-stepper-btn"
-                title="Decrease stake"
+                title="Decrease stake by 10 KES"
+                aria-label="Decrease stake by 10 KES"
               >
-                <Icon name="minus-circle" size={18} />
+                <Icon name="minus" size={13} />
               </button>
               <input
                 type="number"
                 min={MIN_WAGER}
-                step={MIN_WAGER}
+                step={10}
                 value={deck.wager}
-                onChange={(e) => setter((p) => ({ ...p, wager: Math.max(MIN_WAGER, parseInt(e.target.value, 10) || MIN_WAGER) }))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setter((p) => ({ ...p, wager: '' }));
+                    return;
+                  }
+                  const parsed = parseInt(val, 10);
+                  setter((p) => ({ ...p, wager: isNaN(parsed) ? MIN_WAGER : parsed }));
+                }}
+                onBlur={() => {
+                  setter((p) => ({ ...p, wager: Math.max(MIN_WAGER, Number(p.wager) || MIN_WAGER) }));
+                }}
                 className="jp-stepper-input"
               />
               <button
                 type="button"
-                onClick={() => setter((p) => ({ ...p, wager: p.wager + MIN_WAGER }))}
+                onClick={() => setter((p) => {
+                  const cur = Number(p.wager) || MIN_WAGER;
+                  return { ...p, wager: cur + 10 };
+                })}
                 className="jp-stepper-btn"
-                title="Increase stake"
+                title="Increase stake by 10 KES"
+                aria-label="Increase stake by 10 KES"
               >
-                <Icon name="plus-circle" size={18} />
+                <Icon name="plus" size={13} />
               </button>
             </div>
 
@@ -2891,36 +2914,52 @@ export default function UltimateJetPesaCockpit() {
           align-items: center;
           justify-content: space-between;
           background: #000000;
-          border: 1px solid #1f2430;
+          border: 1.5px solid #232b38;
           border-radius: 999px;
-          padding: 2px 8px;
-          height: 36px;
+          padding: 3px 8px;
+          height: 38px;
           box-sizing: border-box;
+          gap: 6px;
         }
         .jp-stepper-btn {
-          background: transparent;
-          border: none;
-          color: #717d91;
+          width: 24px;
+          height: 24px;
+          min-width: 24px;
+          border-radius: 50%;
+          border: 1.5px solid #475569;
+          background: #111827;
+          color: #cbd5e1;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 0;
-          transition: color 0.15s;
+          transition: all 0.15s ease;
+          flex-shrink: 0;
         }
         .jp-stepper-btn:hover {
-          color: #cbd5e1;
+          border-color: #94a3b8;
+          background: #1e293b;
+          color: #ffffff;
+        }
+        .jp-stepper-btn:active {
+          transform: scale(0.92);
+          background: #334155;
+          border-color: #60a5fa;
         }
         .jp-stepper-input {
+          flex: 1;
           width: 100%;
+          min-width: 0;
           background: transparent;
           border: none;
           color: #ffffff;
           font-weight: 900;
           text-align: center;
-          font-size: 15px;
+          font-size: 16px;
           font-family: inherit;
           outline: none;
+          padding: 0;
           -moz-appearance: textfield;
         }
         .jp-stepper-input::-webkit-outer-spin-button,
