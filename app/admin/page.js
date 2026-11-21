@@ -571,52 +571,7 @@ export default function JetPesaAdminPage() {
             <div className="jp-radar-top-grid">
               {/* Left Column: Compact Combined Flight History (Past 5) + Upcoming Departure Schedule (Next 6) */}
               <section className="jp-admin-history-strip jp-history-compact">
-                {/* SUB-SECTION 1: Past Flight Outcomes (Last 5 Crash Points) */}
-                <div className="jp-oracle-sub-section">
-                  <div className="jp-history-strip-header">
-                    <div className="jp-history-strip-title">
-                      <span className="jp-history-clock-icon">🕒</span>
-                      <h3>Past Flight Outcomes (Last 5 Crash Points)</h3>
-                    </div>
-                    <span className="jp-panel-note">Audit Tape</span>
-                  </div>
-
-                  {pastRoundsData.length === 0 ? (
-                    <div className="jp-history-empty">
-                      <span>Awaiting initial round completions...</span>
-                    </div>
-                  ) : (
-                    <div className="jp-history-cards-grid grid-5">
-                      {pastRoundsData.map((pr) => (
-                        <div key={pr.cycleIndex} className={`jp-history-card border-${pr.category.toLowerCase()}`}>
-                          <div className="jp-history-card-top">
-                            <span className="jp-history-round-label">#{pr.cycleIndex}</span>
-                            <span className={`jp-cat-badge badge-${pr.category.toLowerCase()}`}>
-                              {pr.category}
-                            </span>
-                          </div>
-                          <div className="jp-history-card-body">
-                            <span className={`jp-history-mult-num mult-${pr.category.toLowerCase()}`}>
-                              {pr.crashPoint.toFixed(2)}x
-                            </span>
-                          </div>
-                          <div className="jp-history-card-footer">
-                            <span className="jp-history-ago">~{pr.completedAgoSeconds}s ago</span>
-                            {pr.isOverridden ? (
-                              <span className="jp-tag-override-sm">Overridden</span>
-                            ) : (
-                              <span className="jp-tag-natural-sm">Fair</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="jp-oracle-divider" />
-
-                {/* SUB-SECTION 2: Flight Departure Schedule (Next 6 Rounds) */}
+                {/* SUB-SECTION 1: Flight Departure Schedule (Next 6 Rounds) */}
                 <div className="jp-oracle-sub-section">
                   <div className="jp-history-strip-header">
                     <div className="jp-history-strip-title">
@@ -668,6 +623,51 @@ export default function JetPesaAdminPage() {
                               <span className="jp-tag-natural-sm">Fair</span>
                             )}
                             <span className="jp-btn-edit-micro" title="Set Multiplier">✏️</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="jp-oracle-divider" />
+
+                {/* SUB-SECTION 2: Past Flight Outcomes (Last 5 Crash Points) */}
+                <div className="jp-oracle-sub-section">
+                  <div className="jp-history-strip-header">
+                    <div className="jp-history-strip-title">
+                      <span className="jp-history-clock-icon">🕒</span>
+                      <h3>Past Flight Outcomes (Last 5 Crash Points)</h3>
+                    </div>
+                    <span className="jp-panel-note">Audit Tape</span>
+                  </div>
+
+                  {pastRoundsData.length === 0 ? (
+                    <div className="jp-history-empty">
+                      <span>Awaiting initial round completions...</span>
+                    </div>
+                  ) : (
+                    <div className="jp-history-cards-grid grid-5">
+                      {pastRoundsData.map((pr) => (
+                        <div key={pr.cycleIndex} className={`jp-history-card border-${pr.category.toLowerCase()}`}>
+                          <div className="jp-history-card-top">
+                            <span className="jp-history-round-label">#{pr.cycleIndex}</span>
+                            <span className={`jp-cat-badge badge-${pr.category.toLowerCase()}`}>
+                              {pr.category}
+                            </span>
+                          </div>
+                          <div className="jp-history-card-body">
+                            <span className={`jp-history-mult-num mult-${pr.category.toLowerCase()}`}>
+                              {pr.crashPoint.toFixed(2)}x
+                            </span>
+                          </div>
+                          <div className="jp-history-card-footer">
+                            <span className="jp-history-ago">~{pr.completedAgoSeconds}s ago</span>
+                            {pr.isOverridden ? (
+                              <span className="jp-tag-override-sm">Overridden</span>
+                            ) : (
+                              <span className="jp-tag-natural-sm">Fair</span>
+                            )}
                           </div>
                         </div>
                       ))}
