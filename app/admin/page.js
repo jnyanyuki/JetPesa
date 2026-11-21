@@ -30,14 +30,24 @@ export default function JetPesaAdminPage() {
 
   // TOP PANEL: Independent Round Profit Target state (focuses on all rounds real wagers profit lock)
   const [roundProfitInput, setRoundProfitInput] = useState('50');
+  const [roundProfitMode, setRoundProfitMode] = useState('percent'); // 'percent' | 'kes'
   const [roundProfitEnabled, setRoundProfitEnabled] = useState(false);
   const [roundProfitLoading, setRoundProfitLoading] = useState(false);
+  const [roundProfitApplied, setRoundProfitApplied] = useState({ mode: 'percent', value: 50, percent: 50, customKes: 500 });
+  const roundInputFocusedRef = useRef(false);
+  const roundInputDirtyRef = useRef(false);
+  const roundMutationLockRef = useRef(0);
 
   // RIGHT PANEL: Independent House Profit Engine & Daily Target state (player accounts & pay-ins protection)
   const [dailyTargetInput, setDailyTargetInput] = useState('50');
+  const [dailyTargetMode, setDailyTargetMode] = useState('percent'); // 'percent' | 'kes'
   const [dailyTargetEnabled, setDailyTargetEnabled] = useState(false);
   const [dailyTargetLoading, setDailyTargetLoading] = useState(false);
+  const [dailyTargetApplied, setDailyTargetApplied] = useState({ mode: 'percent', value: 50, percent: 50, customKes: 2500 });
   const [houseProfitEngine, setHouseProfitEngine] = useState(null);
+  const dailyInputFocusedRef = useRef(false);
+  const dailyInputDirtyRef = useRef(false);
+  const dailyMutationLockRef = useRef(0);
 
   const pollTimerRef = useRef(null);
 
@@ -111,19 +121,43 @@ export default function JetPesaAdminPage() {
         
         // 1. Top Panel: Round Profit Target (All rounds real wagers lock)
         const roundTarget = data.roundProfitTarget || data.globalProfitTarget;
-        if (roundTarget) {
+        if (roundTarget && Date.now() > roundMutationLockRef.current) {
           setRoundProfitEnabled(Boolean(roundTarget.enabled));
-          if (roundTarget.percent !== undefined && roundTarget.percent !== null) {
-            setRoundProfitInput(String(roundTarget.percent));
+          const rMode = roundTarget.mode || 'percent';
+          const rVal = rMode === 'kes'
+            ? Number(roundTarget.customKes ?? roundTarget.value ?? 500)
+            : Number(roundTarget.percent ?? roundTarget.value ?? 50);
+          setRoundProfitApplied({
+            mode: rMode,
+            value: rVal,
+            percent: Number(roundTarget.percent ?? 50),
+            customKes: Number(roundTarget.customKes ?? 500),
+          });
+          if (!roundInputFocusedRef.current && !roundInputDirtyRef.current) {
+            setRoundProfitMode(rMode);
+            setRoundProfitInput(String(rVal));
           }
         }
 
         // 2. Right Panel: House Profit Engine & Daily Target (Player accounts & Pay-Ins Protection)
         if (data.houseProfitEngine) {
-          setHouseProfitEngine(data.houseProfitEngine);
-          setDailyTargetEnabled(Boolean(data.houseProfitEngine.enabled));
-          if (data.houseProfitEngine.targetPercent !== undefined && data.houseProfitEngine.targetPercent !== null) {
-            setDailyTargetInput(String(data.houseProfitEngine.targetPercent));
+          if (Date.now() > dailyMutationLockRef.current) {
+            setHouseProfitEngine(data.houseProfitEngine);
+            setDailyTargetEnabled(Boolean(data.houseProfitEngine.enabled));
+            const dMode = data.houseProfitEngine.mode || 'percent';
+            const dVal = dMode === 'kes'
+              ? Number(data.houseProfitEngine.customKes ?? data.houseProfitEngine.value ?? 2500)
+              : Number(data.houseProfitEngine.targetPercent ?? data.houseProfitEngine.value ?? 50);
+            setDailyTargetApplied({
+              mode: dMode,
+              value: dVal,
+              percent: Number(data.houseProfitEngine.targetPercent ?? 50),
+              customKes: Number(data.houseProfitEngine.customKes ?? 2500),
+            });
+            if (!dailyInputFocusedRef.current && !dailyInputDirtyRef.current) {
+              setDailyTargetMode(dMode);
+              setDailyTargetInput(String(dVal));
+            }
           }
         }
       }
@@ -283,12 +317,22 @@ export default function JetPesaAdminPage() {
     }
   };
 
+  // Helper to parse custom numeric input cleanly (handles commas, spaces, %, KES)
+  const parseCustomFigure = (raw) => {
+    if (raw === undefined || raw === null) return NaN;
+    const cleaned = String(raw).replace(/[^0-9.]/g, '').trim();
+    return cleaned ? parseFloat(cleaned) : NaN;
+  };
+
   // TOP PANEL: Toggle Round Profit Target ON / OFF across ALL rounds real wagers
   const handleToggleRoundProfit = async () => {
     const nextState = !roundProfitEnabled;
-    const val = parseFloat(roundProfitInput);
-    const safeVal = isNaN(val) || val < 1 || val > 100 ? 50 : val;
+    const parsed = parseCustomFigure(roundProfitInput);
+    const safeVal = (isNaN(parsed) || parsed <= 0) ? (roundProfitApplied.value || 50) : parsed;
+    const effectiveMode = safeVal > 100 ? 'kes' : roundProfitMode;
 
+    roundMutationLockRef.current = Date.now() + 4500;
+    setRoundProfitEnabled(nextState);
     setRoundProfitLoading(true);
     try {
       const res = await adminFetch('/api/admin/rounds', {
@@ -297,15 +341,31 @@ export default function JetPesaAdminPage() {
         body: JSON.stringify({
           action: 'setRoundProfitTarget',
           enabled: nextState,
-          percent: safeVal,
+          value: safeVal,
+          percent: effectiveMode === 'percent' ? safeVal : undefined,
+          customKes: effectiveMode === 'kes' ? safeVal : undefined,
+          mode: effectiveMode,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to toggle round profit target.');
-      setRoundProfitEnabled(nextState);
+      const saved = data.roundProfitTarget || { enabled: nextState, mode: effectiveMode, value: safeVal, percent: safeVal, customKes: safeVal };
+      const rMode = saved.mode || effectiveMode;
+      const rVal = rMode === 'kes' ? Number(saved.customKes ?? safeVal) : Number(saved.percent ?? safeVal);
+      setRoundProfitEnabled(Boolean(saved.enabled));
+      setRoundProfitMode(rMode);
+      setRoundProfitInput(String(rVal));
+      setRoundProfitApplied({
+        mode: rMode,
+        value: rVal,
+        percent: Number(saved.percent ?? 50),
+        customKes: Number(saved.customKes ?? 500),
+      });
+      roundInputDirtyRef.current = false;
+      const label = rMode === 'kes' ? `KES ${rVal.toLocaleString()}` : `${rVal}%`;
       showToast(
         nextState 
-          ? `🎯 Round Profit Target ACTIVATED (${safeVal}% on all rounds real wagers)!` 
+          ? `🎯 Round Profit Target ACTIVATED (${label} on all rounds real wagers)!` 
           : 'Round Profit Target DISABLED (Provably Fair natural flight enabled).'
       );
       await loadRoundsRadar();
@@ -316,15 +376,21 @@ export default function JetPesaAdminPage() {
     }
   };
 
-  // TOP PANEL: Save / Update Round Profit Target Percentage across ALL rounds real wagers
-  const handleSaveRoundProfit = async (customVal) => {
+  // TOP PANEL: Save / Update Round Profit Target custom figure across ALL rounds real wagers
+  const handleSaveRoundProfit = async (customVal, customMode) => {
     const rawVal = customVal !== undefined ? customVal : roundProfitInput;
-    const val = parseFloat(rawVal);
-    if (isNaN(val) || val < 1 || val > 100) {
-      showToast('Please enter a round profit target percentage between 1% and 100%.', 'error');
+    const val = parseCustomFigure(rawVal);
+    if (isNaN(val) || val <= 0) {
+      showToast('Please enter a valid positive number for the round profit target.', 'error');
       return;
     }
 
+    const effectiveMode = customMode || (val > 100 ? 'kes' : roundProfitMode);
+    const normalizedVal = effectiveMode === 'percent'
+      ? Math.min(100, Math.max(0.1, parseFloat(val.toFixed(2))))
+      : Math.max(1, parseFloat(val.toFixed(2)));
+
+    roundMutationLockRef.current = Date.now() + 4500;
     setRoundProfitLoading(true);
     try {
       const res = await adminFetch('/api/admin/rounds', {
@@ -333,14 +399,29 @@ export default function JetPesaAdminPage() {
         body: JSON.stringify({
           action: 'setRoundProfitTarget',
           enabled: true,
-          percent: val,
+          value: normalizedVal,
+          percent: effectiveMode === 'percent' ? normalizedVal : undefined,
+          customKes: effectiveMode === 'kes' ? normalizedVal : undefined,
+          mode: effectiveMode,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to update round profit target.');
+      const saved = data.roundProfitTarget || { enabled: true, mode: effectiveMode, value: normalizedVal, percent: normalizedVal, customKes: normalizedVal };
+      const rMode = saved.mode || effectiveMode;
+      const rVal = rMode === 'kes' ? Number(saved.customKes ?? normalizedVal) : Number(saved.percent ?? normalizedVal);
       setRoundProfitEnabled(true);
-      setRoundProfitInput(String(val));
-      showToast(`🎯 Round Profit Target set to ${val}% of real wagers across all rounds.`);
+      setRoundProfitMode(rMode);
+      setRoundProfitInput(String(rVal));
+      setRoundProfitApplied({
+        mode: rMode,
+        value: rVal,
+        percent: Number(saved.percent ?? 50),
+        customKes: Number(saved.customKes ?? 500),
+      });
+      roundInputDirtyRef.current = false;
+      const label = rMode === 'kes' ? `KES ${rVal.toLocaleString()}` : `${rVal}%`;
+      showToast(`🎯 Round Profit Target locked at ${label} across all rounds.`);
       await loadRoundsRadar();
     } catch (err) {
       showToast(err.message, 'error');
@@ -352,9 +433,12 @@ export default function JetPesaAdminPage() {
   // RIGHT PANEL: Toggle House Profit Engine & Daily Target (Player accounts & Pay-Ins Protection)
   const handleToggleDailyTarget = async () => {
     const nextState = !dailyTargetEnabled;
-    const val = parseFloat(dailyTargetInput);
-    const safeVal = isNaN(val) || val < 1 || val > 100 ? 50 : val;
+    const parsed = parseCustomFigure(dailyTargetInput);
+    const safeVal = (isNaN(parsed) || parsed <= 0) ? (dailyTargetApplied.value || 50) : parsed;
+    const effectiveMode = safeVal > 100 ? 'kes' : dailyTargetMode;
 
+    dailyMutationLockRef.current = Date.now() + 4500;
+    setDailyTargetEnabled(nextState);
     setDailyTargetLoading(true);
     try {
       const res = await adminFetch('/api/admin/rounds', {
@@ -363,17 +447,34 @@ export default function JetPesaAdminPage() {
         body: JSON.stringify({
           action: 'setDailyProfitEngine',
           enabled: nextState,
-          percent: safeVal,
+          value: safeVal,
+          percent: effectiveMode === 'percent' ? safeVal : undefined,
+          customKes: effectiveMode === 'kes' ? safeVal : undefined,
+          mode: effectiveMode,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to toggle daily profit engine.');
-      setDailyTargetEnabled(nextState);
+      const saved = data.dailyProfitEngine || { enabled: nextState, mode: effectiveMode, value: safeVal, percent: safeVal, customKes: safeVal };
+      const dMode = saved.mode || effectiveMode;
+      const dVal = dMode === 'kes' ? Number(saved.customKes ?? safeVal) : Number(saved.percent ?? safeVal);
+      setDailyTargetEnabled(Boolean(saved.enabled));
+      setDailyTargetMode(dMode);
+      setDailyTargetInput(String(dVal));
+      setDailyTargetApplied({
+        mode: dMode,
+        value: dVal,
+        percent: Number(saved.percent ?? 50),
+        customKes: Number(saved.customKes ?? 2500),
+      });
+      dailyInputDirtyRef.current = false;
+      const label = dMode === 'kes' ? `KES ${dVal.toLocaleString()}` : `${dVal}%`;
       showToast(
         nextState 
-          ? `🛡️ Daily Profit Target ACTIVATED (${safeVal}% pay-ins margin & player funds protection)!` 
+          ? `🛡️ Daily Profit Target ACTIVATED (${label} lock on active funds & pay-ins)!` 
           : 'Daily Profit Target set to pass-through.'
       );
+      dailyMutationLockRef.current = 0;
       await loadRoundsRadar();
     } catch (err) {
       showToast(err.message, 'error');
@@ -382,15 +483,21 @@ export default function JetPesaAdminPage() {
     }
   };
 
-  // RIGHT PANEL: Save / Update Daily Profit Target Percentage
-  const handleSaveDailyTarget = async (customVal) => {
+  // RIGHT PANEL: Save / Update Daily Profit Target custom figure (% or KES)
+  const handleSaveDailyTarget = async (customVal, customMode) => {
     const rawVal = customVal !== undefined ? customVal : dailyTargetInput;
-    const val = parseFloat(rawVal);
-    if (isNaN(val) || val < 1 || val > 100) {
-      showToast('Please enter a daily profit target percentage between 1% and 100%.', 'error');
+    const val = parseCustomFigure(rawVal);
+    if (isNaN(val) || val <= 0) {
+      showToast('Please enter a valid positive number for the daily profit target.', 'error');
       return;
     }
 
+    const effectiveMode = customMode || (val > 100 ? 'kes' : dailyTargetMode);
+    const normalizedVal = effectiveMode === 'percent'
+      ? Math.min(100, Math.max(0.1, parseFloat(val.toFixed(2))))
+      : Math.max(1, parseFloat(val.toFixed(2)));
+
+    dailyMutationLockRef.current = Date.now() + 4500;
     setDailyTargetLoading(true);
     try {
       const res = await adminFetch('/api/admin/rounds', {
@@ -399,14 +506,30 @@ export default function JetPesaAdminPage() {
         body: JSON.stringify({
           action: 'setDailyProfitEngine',
           enabled: true,
-          percent: val,
+          value: normalizedVal,
+          percent: effectiveMode === 'percent' ? normalizedVal : undefined,
+          customKes: effectiveMode === 'kes' ? normalizedVal : undefined,
+          mode: effectiveMode,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to update daily profit target.');
+      const saved = data.dailyProfitEngine || { enabled: true, mode: effectiveMode, value: normalizedVal, percent: normalizedVal, customKes: normalizedVal };
+      const dMode = saved.mode || effectiveMode;
+      const dVal = dMode === 'kes' ? Number(saved.customKes ?? normalizedVal) : Number(saved.percent ?? normalizedVal);
       setDailyTargetEnabled(true);
-      setDailyTargetInput(String(val));
-      showToast(`🛡️ Daily Profit Target set to ${val}% of real deposits & player funds.`);
+      setDailyTargetMode(dMode);
+      setDailyTargetInput(String(dVal));
+      setDailyTargetApplied({
+        mode: dMode,
+        value: dVal,
+        percent: Number(saved.percent ?? 50),
+        customKes: Number(saved.customKes ?? 2500),
+      });
+      dailyInputDirtyRef.current = false;
+      const label = dMode === 'kes' ? `KES ${dVal.toLocaleString()}` : `${dVal}%`;
+      showToast(`🛡️ Daily Profit Target locked at ${label} of active player funds & pay-ins.`);
+      dailyMutationLockRef.current = 0;
       await loadRoundsRadar();
     } catch (err) {
       showToast(err.message, 'error');
@@ -542,28 +665,61 @@ export default function JetPesaAdminPage() {
             </span>
           </div>
 
-          {/* Percentage Target Input & Set Button */}
+          {/* Custom Figure Input (% or KES) & Set Button */}
           <div className="jp-profit-input-group">
+            <div className="jp-unit-mode-toggle" title="Switch between Percentage (%) and Fixed Amount (KES)">
+              <button
+                type="button"
+                className={`jp-unit-mode-btn ${roundProfitMode === 'percent' ? 'active' : ''}`}
+                onClick={() => {
+                  roundInputDirtyRef.current = true;
+                  setRoundProfitMode('percent');
+                }}
+              >
+                %
+              </button>
+              <button
+                type="button"
+                className={`jp-unit-mode-btn ${roundProfitMode === 'kes' ? 'active' : ''}`}
+                onClick={() => {
+                  roundInputDirtyRef.current = true;
+                  setRoundProfitMode('kes');
+                }}
+              >
+                KES
+              </button>
+            </div>
             <div className="jp-profit-input-wrap">
+              {roundProfitMode === 'kes' && <span className="jp-profit-currency">KES</span>}
               <input
-                type="number"
-                min="1"
-                max="100"
-                step="0.1"
-                placeholder="e.g. 42.5"
+                type="text"
+                inputMode="decimal"
+                placeholder={roundProfitMode === 'kes' ? 'e.g. 500' : 'e.g. 42.5'}
                 value={roundProfitInput}
-                onChange={(e) => setRoundProfitInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveRoundProfit(); }}
+                onFocus={() => { roundInputFocusedRef.current = true; }}
+                onBlur={() => { roundInputFocusedRef.current = false; }}
+                onChange={(e) => {
+                  roundInputDirtyRef.current = true;
+                  setRoundProfitInput(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSaveRoundProfit();
+                  }
+                }}
                 className="jp-profit-input"
-                title="Percentage house profit target on real wagers across all rounds (1% to 100%)"
+                title={roundProfitMode === 'kes'
+                  ? 'Custom KES profit target locked per round across all rounds'
+                  : 'Custom percentage profit target on real wagers across all rounds (0.1% to 100%)'}
               />
-              <span className="jp-profit-currency">%</span>
+              {roundProfitMode === 'percent' && <span className="jp-profit-currency">%</span>}
             </div>
             <button
               type="button"
               className="jp-profit-apply-btn"
               onClick={() => handleSaveRoundProfit()}
-              disabled={roundProfitLoading || !roundProfitInput}
+              disabled={roundProfitLoading || !String(roundProfitInput).trim()}
               title="Save custom round profit target for all rounds"
             >
               {roundProfitLoading ? '...' : 'SET'}
@@ -575,11 +731,13 @@ export default function JetPesaAdminPage() {
             {roundProfitEnabled ? (
               <div
                 className={`jp-profit-status-badge ${profitTargetData?.isSecured ? 'secured' : 'active'}`}
-                title={profitTargetData?.reason || `System enforces ${roundProfitInput}% profit on real wagers`}
+                title={profitTargetData?.reason || `System enforces ${roundProfitApplied.mode === 'kes' ? `KES ${roundProfitApplied.customKes}` : `${roundProfitApplied.percent}%`} profit on real wagers`}
               >
                 <span className={`jp-profit-indicator-dot ${profitTargetData?.isSecured ? 'secured' : 'active'}`} />
                 <span className="jp-profit-target-val">
-                  ALL ROUNDS: {roundProfitInput}% WAGERS LOCK
+                  ALL ROUNDS: {roundProfitApplied.mode === 'kes'
+                    ? `KES ${Number(roundProfitApplied.customKes || roundProfitApplied.value).toLocaleString()} LOCK`
+                    : `${roundProfitApplied.percent ?? roundProfitApplied.value}% WAGERS LOCK`}
                 </span>
                 {profitTargetData?.safeMultiplierCap && (
                   <span className="jp-profit-cap-tag">
@@ -831,7 +989,9 @@ export default function JetPesaAdminPage() {
                       KES {(houseProfitEngine?.calculatedDailyTargetKes || 0).toLocaleString()}
                     </span>
                     <span className="jp-engine-metric-sub">
-                      Locks {dailyTargetInput || 50}% margin on active funds
+                      {dailyTargetApplied.mode === 'kes'
+                        ? `Custom fixed lock: KES ${Number(dailyTargetApplied.customKes || dailyTargetApplied.value).toLocaleString()}`
+                        : `Locks ${dailyTargetApplied.percent ?? dailyTargetApplied.value}% of active funds & pay-ins`}
                     </span>
                   </div>
                 </div>
@@ -858,33 +1018,68 @@ export default function JetPesaAdminPage() {
                   </div>
                 </div>
 
-                {/* Controls: Target Presets, Custom Input & Lock Button */}
+                {/* Controls: Custom Figure Input (% or KES) & Lock Button */}
                 <div className="jp-engine-controls-bar">
                   <span className="jp-engine-control-label">
-                    CUSTOM DAILY RETENTION TARGET (1% – 100%, decimals allowed):
+                    {dailyTargetMode === 'kes'
+                      ? 'CUSTOM DAILY PROFIT TARGET FIGURE (KES AMOUNT):'
+                      : 'CUSTOM DAILY RETENTION TARGET (% OF FUNDS & PAY-INS):'}
                   </span>
 
                   <div className="jp-engine-input-apply">
+                    <div className="jp-unit-mode-toggle" title="Switch between Percentage (%) and Fixed Amount (KES)">
+                      <button
+                        type="button"
+                        className={`jp-unit-mode-btn ${dailyTargetMode === 'percent' ? 'active' : ''}`}
+                        onClick={() => {
+                          dailyInputDirtyRef.current = true;
+                          setDailyTargetMode('percent');
+                        }}
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        className={`jp-unit-mode-btn ${dailyTargetMode === 'kes' ? 'active' : ''}`}
+                        onClick={() => {
+                          dailyInputDirtyRef.current = true;
+                          setDailyTargetMode('kes');
+                        }}
+                      >
+                        KES
+                      </button>
+                    </div>
                     <div className="jp-profit-input-wrap">
+                      {dailyTargetMode === 'kes' && <span className="jp-profit-currency">KES</span>}
                       <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        step="0.1"
-                        placeholder="e.g. 37.5"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder={dailyTargetMode === 'kes' ? 'e.g. 3500' : 'e.g. 37.5'}
                         value={dailyTargetInput}
-                        onChange={(e) => setDailyTargetInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveDailyTarget(); }}
-                        className="jp-profit-input"
-                        title="Daily profit retention percentage applied to deposits and player funds"
+                        onFocus={() => { dailyInputFocusedRef.current = true; }}
+                        onBlur={() => { dailyInputFocusedRef.current = false; }}
+                        onChange={(e) => {
+                          dailyInputDirtyRef.current = true;
+                          setDailyTargetInput(e.target.value);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveDailyTarget();
+                          }
+                        }}
+                        className="jp-profit-input jp-profit-input-wide"
+                        title={dailyTargetMode === 'kes'
+                          ? 'Custom daily profit target figure in KES'
+                          : 'Daily profit retention percentage applied to deposits and player funds'}
                       />
-                      <span className="jp-profit-currency">%</span>
+                      {dailyTargetMode === 'percent' && <span className="jp-profit-currency">%</span>}
                     </div>
                     <button
                       type="button"
                       className="jp-engine-lock-btn"
                       onClick={() => handleSaveDailyTarget()}
-                      disabled={dailyTargetLoading}
+                      disabled={dailyTargetLoading || !String(dailyTargetInput).trim()}
                     >
                       {dailyTargetLoading ? '...' : 'LOCK & APPLY'}
                     </button>
@@ -1662,10 +1857,15 @@ export default function JetPesaAdminPage() {
         .jp-profit-toggle-label.off { color: #64748b; }
 
 
-        .jp-profit-input-group { display: flex; align-items: center; gap: 4px; }
-        .jp-profit-input-wrap { display: flex; align-items: center; background: #040814; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 5px; padding: 2px 6px; gap: 3px; }
-        .jp-profit-currency { font-size: 10px; font-weight: 900; color: #10b981; }
-        .jp-profit-input { width: 34px; background: transparent; border: none; outline: none; color: #fff; font-weight: 900; font-size: 11px; font-family: ui-monospace, monospace; text-align: right; }
+        .jp-profit-input-group { display: flex; align-items: center; gap: 5px; }
+        .jp-unit-mode-toggle { display: inline-flex; background: #040814; border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 5px; padding: 1px; gap: 1px; }
+        .jp-unit-mode-btn { background: transparent; border: none; color: #64748b; font-size: 8.5px; font-weight: 900; padding: 2px 5px; border-radius: 3.5px; cursor: pointer; transition: all 0.15s; }
+        .jp-unit-mode-btn.active { background: #1e293b; color: #34d399; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+        .jp-profit-input-wrap { display: flex; align-items: center; background: #040814; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 5px; padding: 2px 7px; gap: 4px; }
+        .jp-profit-input-wrap:focus-within { border-color: #34d399; box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2); }
+        .jp-profit-currency { font-size: 9.5px; font-weight: 900; color: #10b981; user-select: none; }
+        .jp-profit-input { width: 58px; background: transparent; border: none; outline: none; color: #fff; font-weight: 900; font-size: 11px; font-family: ui-monospace, monospace; text-align: right; }
+        .jp-profit-input.jp-profit-input-wide { width: 72px; }
         .jp-profit-input::-webkit-inner-spin-button, .jp-profit-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         .jp-profit-apply-btn { background: #1e293b; color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: 800; cursor: pointer; transition: all 0.15s; }
         .jp-profit-apply-btn:hover:not(:disabled) { background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #fff; }

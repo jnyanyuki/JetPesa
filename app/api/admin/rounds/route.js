@@ -44,16 +44,16 @@ export async function GET(request) {
       await loadAllProfitSettingsFromDb();
 
       const dbOverrides = await sql.query(`
-        SELECT round_id, crash_point, target_profit_percent, target_profit_kes FROM public.round_overrides
+        SELECT round_id, crash_point, target_profit_percent, target_profit_kes, note FROM public.round_overrides
       `);
+      const globalRoundTarget = getRoundProfitTargetGlobal();
       for (const row of dbOverrides) {
+        const isAutoTargetRow = (row.note && row.note.includes('Profit Target')) || row.target_profit_percent !== null || row.target_profit_kes !== null;
         if (row.crash_point !== null && row.crash_point !== undefined) {
-          setMemoryOverride(row.round_id, Number(row.crash_point));
-        }
-        if (row.target_profit_percent !== null && row.target_profit_percent !== undefined) {
-          setRoundProfitTarget(row.round_id, Number(row.target_profit_percent));
-        } else if (row.target_profit_kes !== null && row.target_profit_kes !== undefined) {
-          setRoundProfitTarget(row.round_id, 50);
+          // Only load auto-target crash cap if global round target is still enabled
+          if (!isAutoTargetRow || globalRoundTarget.enabled) {
+            setMemoryOverride(row.round_id, Number(row.crash_point));
+          }
         }
       }
     } catch (e) {
@@ -324,15 +324,21 @@ export async function GET(request) {
 
     // 2. Independent Right Panel: House Profit Engine & Daily Target (Player Funds & Pay-Ins Protection)
     const currentDailyEngine = getDailyProfitEngineGlobal();
-    const dailyTargetPct = currentDailyEngine.percent || 50;
+    const dailyMode = currentDailyEngine.mode || 'percent';
+    const dailyTargetPct = Number(currentDailyEngine.percent ?? 50);
+    const dailyCustomKes = Number(currentDailyEngine.customKes ?? 2500);
     const depBase = (dailyStats.depositsTotal > 0) ? dailyStats.depositsTotal : treasuryStats.allTimeDeposits;
-    
-    // Pay-ins retention target vs Player wallet funds coverage
-    const targetFromPayIns = depBase * (dailyTargetPct / 100);
-    const targetFromLiabilities = treasuryStats.totalLiabilities * (dailyTargetPct / 100);
-    
-    // Daily target locks the pay-in margin while ensuring player balance exposure is defended
-    const calculatedDailyTargetKes = Math.round(Math.max(targetFromPayIns, targetFromLiabilities * 0.35, 500));
+    const activeFundsPool = treasuryStats.totalLiabilities + depBase;
+
+    // Calculate daily profit target directly from custom KES figure OR exact % of active player funds + pay-ins
+    let calculatedDailyTargetKes = 0;
+    if (dailyMode === 'kes') {
+      calculatedDailyTargetKes = Math.round(dailyCustomKes);
+    } else {
+      const basePool = activeFundsPool > 0 ? activeFundsPool : 1000;
+      calculatedDailyTargetKes = Math.max(1, Math.round(basePool * (dailyTargetPct / 100)));
+    }
+
     const currentGgr = dailyStats.grossGamingRevenue;
     const isDailyTargetAchieved = currentGgr >= calculatedDailyTargetKes;
     const targetProgressPct = Math.min(100, Math.max(0, Math.round((currentGgr / (calculatedDailyTargetKes || 1)) * 100)));
@@ -340,7 +346,10 @@ export async function GET(request) {
 
     const houseProfitEngine = {
       enabled: Boolean(currentDailyEngine.enabled),
+      mode: dailyMode,
       targetPercent: dailyTargetPct,
+      customKes: dailyCustomKes,
+      value: dailyMode === 'kes' ? dailyCustomKes : dailyTargetPct,
       totalUsers: treasuryStats.totalUsers,
       totalLiabilities: treasuryStats.totalLiabilities,
       allTimeDeposits: treasuryStats.allTimeDeposits,
@@ -349,6 +358,7 @@ export async function GET(request) {
       todayWagered: dailyStats.wageredTotal,
       todayWon: dailyStats.wonTotal,
       todayGgr: currentGgr,
+      activeFundsPool,
       calculatedDailyTargetKes,
       targetProgressPct,
       isDailyTargetAchieved,
@@ -378,7 +388,7 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { action, enabled, percent, cycleIndex, crashPoint, note, instantCrash, targetProfitPercent, targetProfitKes } = body;
+    const { action, enabled, percent, value, customKes, mode, cycleIndex, crashPoint, note, instantCrash, targetProfitPercent, targetProfitKes } = body;
 
     // 1. Top Panel: Round Profit Target (Affects ALL rounds real wagers continuously)
     if (
@@ -389,9 +399,19 @@ export async function POST(request) {
       action === 'setGlobalTarget' || 
       body.roundProfitTarget !== undefined
     ) {
-      const isEnabled = enabled !== undefined ? enabled : body.roundProfitTarget?.enabled;
-      const targetPct = percent !== undefined ? percent : (targetProfitPercent || body.roundProfitTarget?.percent);
-      const result = await setRoundProfitTargetGlobalDb(isEnabled, targetPct);
+      const current = getRoundProfitTargetGlobal();
+      const isEnabled = enabled !== undefined ? Boolean(enabled) : (body.roundProfitTarget?.enabled ?? current.enabled);
+      const targetVal = value !== undefined ? value : (
+        percent !== undefined ? percent : (
+          customKes !== undefined ? customKes : (
+            targetProfitPercent !== undefined ? targetProfitPercent : (
+              targetProfitKes !== undefined ? targetProfitKes : body.roundProfitTarget?.value
+            )
+          )
+        )
+      );
+      const targetMode = mode || body.roundProfitTarget?.mode || current.mode || 'percent';
+      const result = await setRoundProfitTargetGlobalDb(isEnabled, targetVal, targetMode);
       return NextResponse.json({
         success: true,
         ...result,
@@ -405,9 +425,15 @@ export async function POST(request) {
       action === 'toggleDailyProfitEngine' || 
       body.dailyProfitEngine !== undefined
     ) {
-      const isEnabled = enabled !== undefined ? enabled : body.dailyProfitEngine?.enabled;
-      const targetPct = percent !== undefined ? percent : body.dailyProfitEngine?.percent;
-      const result = await setDailyProfitEngineDb(isEnabled, targetPct);
+      const current = getDailyProfitEngineGlobal();
+      const isEnabled = enabled !== undefined ? Boolean(enabled) : (body.dailyProfitEngine?.enabled ?? current.enabled);
+      const targetVal = value !== undefined ? value : (
+        percent !== undefined ? percent : (
+          customKes !== undefined ? customKes : body.dailyProfitEngine?.value
+        )
+      );
+      const targetMode = mode || body.dailyProfitEngine?.mode || current.mode || 'percent';
+      const result = await setDailyProfitEngineDb(isEnabled, targetVal, targetMode);
       return NextResponse.json({
         success: true,
         ...result,
