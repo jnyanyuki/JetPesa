@@ -2377,7 +2377,7 @@ export default function UltimateJetPesaCockpit() {
               <div className="jp-bclb-controls">
                 <div className="jp-limit-chip">
                   <span className="jp-limit-label">DAILY STAKE LIMIT:</span>
-                  <span className="jp-limit-val">KES 50,000 / Day</span>
+                  <span className="jp-limit-val">KES 500,000 / Day</span>
                 </div>
                 <button
                   type="button"
