@@ -553,26 +553,6 @@ export default function JetPesaAdminPage() {
           </div>
         </div>
 
-        {/* Live Flight Telemetry Indicator */}
-        <div className="jp-admin-telemetry">
-          {currentCycleState ? (
-            <div className="jp-admin-live-badge">
-              <span className="jp-pulse-dot" />
-              <span>ROUND #{currentCycleState.currentCycleIndex || currentCycleState.cycleIndex}</span>
-              <span className="jp-tele-divider">|</span>
-              <span style={{ color: currentCycleState.hasCrashed ? '#f43f5e' : currentCycleState.isBettingPhase ? '#fbbf24' : '#22c55e', fontWeight: 900 }}>
-                {currentCycleState.hasCrashed
-                  ? `CRASHED @ ${(currentCycleState.crashPoint || currentCycleState.currentCrashPoint || currentCycleState.currentMultiplier || 1.0).toFixed(2)}x`
-                  : currentCycleState.isBettingPhase
-                  ? 'COUNTDOWN'
-                  : `FLYING @ ${(currentCycleState.currentMultiplier || currentCycleState.multiplier || 1.0).toFixed(2)}x`}
-              </span>
-            </div>
-          ) : (
-            <div className="jp-admin-live-badge">Connecting to Game Engine...</div>
-          )}
-        </div>
-
         <div className="jp-admin-head-actions">
           <Link href="/dashboard" className="jp-admin-dash-link" target="_blank">
             Open Player UI ↗
