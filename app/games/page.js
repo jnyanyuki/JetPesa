@@ -257,41 +257,6 @@ export default function GamesLobbyPage() {
       </header>
 
       {/* =================================================================== */}
-      {/* HERO BANNER                                                         */}
-      {/* =================================================================== */}
-      <section className="jp-lobby-hero">
-        <div className="jp-hero-content">
-          <div className="jp-hero-tag">
-            <span className="jp-live-dot" />
-            <span>OFFICIAL REAL-MONEY CASINO & CRASH ARCADE</span>
-          </div>
-          <h1 className="jp-hero-title">
-            PROVABLY FAIR GAMES <br />
-            <span className="jp-hero-gradient">FAST FLIGHTS. INSTANT CASHOUTS.</span>
-          </h1>
-          <p className="jp-hero-subtitle">
-            Play Kenya&apos;s leading online multiplier games. Fully integrated with Safaricom M-Pesa
-            instant STK deposits and automated B2C withdrawals.
-          </p>
-
-          <div className="jp-hero-stats">
-            <div className="jp-hero-stat-card">
-              <span className="jp-stat-num">97.5%</span>
-              <span className="jp-stat-lbl">AUDITED PLATFORM RTP</span>
-            </div>
-            <div className="jp-hero-stat-card">
-              <span className="jp-stat-num">KES 10</span>
-              <span className="jp-stat-lbl">MINIMUM WAGER</span>
-            </div>
-            <div className="jp-hero-stat-card">
-              <span className="jp-stat-num">SHA-256</span>
-              <span className="jp-stat-lbl">PROVABLY FAIR SEED</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* =================================================================== */}
       {/* CONTROLS: CATEGORIES & SEARCH                                       */}
       {/* =================================================================== */}
       <div className="jp-lobby-controls">
@@ -423,6 +388,41 @@ export default function GamesLobbyPage() {
           })}
         </div>
       </main>
+
+      {/* =================================================================== */}
+      {/* PROVABLY FAIR PLATFORM BANNER                                       */}
+      {/* =================================================================== */}
+      <section className="jp-lobby-hero">
+        <div className="jp-hero-content">
+          <div className="jp-hero-tag">
+            <span className="jp-live-dot" />
+            <span>OFFICIAL REAL-MONEY CASINO & CRASH ARCADE</span>
+          </div>
+          <h1 className="jp-hero-title">
+            PROVABLY FAIR GAMES <br />
+            <span className="jp-hero-gradient">FAST FLIGHTS. INSTANT CASHOUTS.</span>
+          </h1>
+          <p className="jp-hero-subtitle">
+            Play Kenya&apos;s leading online multiplier games. Fully integrated with Safaricom M-Pesa
+            instant STK deposits and automated B2C withdrawals.
+          </p>
+
+          <div className="jp-hero-stats">
+            <div className="jp-hero-stat-card">
+              <span className="jp-stat-num">97.5%</span>
+              <span className="jp-stat-lbl">AUDITED PLATFORM RTP</span>
+            </div>
+            <div className="jp-hero-stat-card">
+              <span className="jp-stat-num">KES 10</span>
+              <span className="jp-stat-lbl">MINIMUM WAGER</span>
+            </div>
+            <div className="jp-hero-stat-card">
+              <span className="jp-stat-num">SHA-256</span>
+              <span className="jp-stat-lbl">PROVABLY FAIR SEED</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* =================================================================== */}
       {/* FOOTER & BCLB REGULATORY                                            */}
@@ -645,10 +645,12 @@ export default function GamesLobbyPage() {
           filter: brightness(1.15);
         }
 
-        /* Hero */
+        /* Hero / Trust Banner (After Games) */
         .jp-lobby-hero {
-          padding: 48px 24px;
+          padding: 56px 24px 48px;
+          margin-top: 40px;
           background: radial-gradient(circle at 50% 20%, rgba(239, 68, 68, 0.08) 0%, transparent 70%);
+          border-top: 1px solid rgba(255, 255, 255, 0.06);
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
           display: flex;
           justify-content: center;
@@ -738,7 +740,7 @@ export default function GamesLobbyPage() {
 
         /* Controls */
         .jp-lobby-controls {
-          padding: 16px 24px;
+          padding: 24px 24px 16px;
           max-width: 1240px;
           width: 100%;
           margin: 0 auto;
