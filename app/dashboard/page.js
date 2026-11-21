@@ -13,6 +13,7 @@ import MinesGame from '../../components/games/mines/MinesGame';
 import PenaltyGame from '../../components/games/penalty/PenaltyGame';
 import PlinkoGame from '../../components/games/plinko/PlinkoGame';
 import DiceGame from '../../components/games/dice/DiceGame';
+import CoinflipGame from '../../components/games/coinflip/CoinflipGame';
 
 const MIN_WAGER = 10;
 const HISTORY_STORAGE_KEY = 'jetpesa_real_previous_rounds';
@@ -2101,6 +2102,14 @@ export default function UltimateJetPesaCockpit() {
             />
           ) : activeGameId === 'dice' ? (
             <DiceGame
+              balance={balance}
+              onBalanceChange={setBalance}
+              triggerToast={triggerToast}
+              onOpenDeposit={() => setIsDepositModalOpen(true)}
+              onOpenProvably={openProvablyModal}
+            />
+          ) : activeGameId === 'coinflip' ? (
+            <CoinflipGame
               balance={balance}
               onBalanceChange={setBalance}
               triggerToast={triggerToast}
