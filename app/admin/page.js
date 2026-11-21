@@ -569,47 +569,111 @@ export default function JetPesaAdminPage() {
           <div className="jp-admin-radar-view">
             {/* TOP ROW: Compact Past Flight Outcomes (Left) + House Profit Engine & Daily Target Calculator (Right) */}
             <div className="jp-radar-top-grid">
-              {/* Left Column: Compact Past Flight Outcomes (Last 5 Crash Points) */}
+              {/* Left Column: Compact Combined Flight History (Past 5) + Upcoming Departure Schedule (Next 6) */}
               <section className="jp-admin-history-strip jp-history-compact">
-                <div className="jp-history-strip-header">
-                  <div className="jp-history-strip-title">
-                    <span className="jp-history-clock-icon">🕒</span>
-                    <h3>Past Flight Outcomes (Last 5 Crash Points)</h3>
+                {/* SUB-SECTION 1: Past Flight Outcomes (Last 5 Crash Points) */}
+                <div className="jp-oracle-sub-section">
+                  <div className="jp-history-strip-header">
+                    <div className="jp-history-strip-title">
+                      <span className="jp-history-clock-icon">🕒</span>
+                      <h3>Past Flight Outcomes (Last 5 Crash Points)</h3>
+                    </div>
+                    <span className="jp-panel-note">Audit Tape</span>
                   </div>
-                  <span className="jp-panel-note">Audit Tape</span>
+
+                  {pastRoundsData.length === 0 ? (
+                    <div className="jp-history-empty">
+                      <span>Awaiting initial round completions...</span>
+                    </div>
+                  ) : (
+                    <div className="jp-history-cards-grid grid-5">
+                      {pastRoundsData.map((pr) => (
+                        <div key={pr.cycleIndex} className={`jp-history-card border-${pr.category.toLowerCase()}`}>
+                          <div className="jp-history-card-top">
+                            <span className="jp-history-round-label">#{pr.cycleIndex}</span>
+                            <span className={`jp-cat-badge badge-${pr.category.toLowerCase()}`}>
+                              {pr.category}
+                            </span>
+                          </div>
+                          <div className="jp-history-card-body">
+                            <span className={`jp-history-mult-num mult-${pr.category.toLowerCase()}`}>
+                              {pr.crashPoint.toFixed(2)}x
+                            </span>
+                          </div>
+                          <div className="jp-history-card-footer">
+                            <span className="jp-history-ago">~{pr.completedAgoSeconds}s ago</span>
+                            {pr.isOverridden ? (
+                              <span className="jp-tag-override-sm">Overridden</span>
+                            ) : (
+                              <span className="jp-tag-natural-sm">Fair</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {pastRoundsData.length === 0 ? (
-                  <div className="jp-history-empty">
-                    <span>Awaiting initial round completions...</span>
+                <div className="jp-oracle-divider" />
+
+                {/* SUB-SECTION 2: Flight Departure Schedule (Next 6 Rounds) */}
+                <div className="jp-oracle-sub-section">
+                  <div className="jp-history-strip-header">
+                    <div className="jp-history-strip-title">
+                      <span className="jp-history-clock-icon">🚀</span>
+                      <h3>Flight Departure Schedule (Next 6 Rounds)</h3>
+                    </div>
+                    <span className="jp-panel-note">Live Oracle</span>
                   </div>
-                ) : (
-                  <div className="jp-history-cards-grid">
-                    {pastRoundsData.map((pr) => (
-                      <div key={pr.cycleIndex} className={`jp-history-card border-${pr.category.toLowerCase()}`}>
-                        <div className="jp-history-card-top">
-                          <span className="jp-history-round-label">#{pr.cycleIndex}</span>
-                          <span className={`jp-cat-badge badge-${pr.category.toLowerCase()}`}>
-                            {pr.category}
-                          </span>
+
+                  {roundsData.length === 0 ? (
+                    <div className="jp-history-empty">
+                      <span>Calculating upcoming departure sequence...</span>
+                    </div>
+                  ) : (
+                    <div className="jp-history-cards-grid grid-6">
+                      {roundsData.slice(0, 6).map((r) => (
+                        <div
+                          key={r.cycleIndex}
+                          className={`jp-history-card border-${r.category.toLowerCase()} ${r.isCurrent ? 'jp-card-live' : ''}`}
+                          onClick={() => setOverrideModal({
+                            open: true,
+                            cycleIndex: r.cycleIndex,
+                            currentPoint: r.crashPoint,
+                            newPoint: r.crashPoint.toString(),
+                          })}
+                          title="Click to override target crash multiplier for this round"
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <div className="jp-history-card-top">
+                            <span className="jp-history-round-label">#{r.cycleIndex}</span>
+                            {r.isCurrent ? (
+                              <span className="jp-status-pill pill-live">LIVE</span>
+                            ) : (
+                              <span className="jp-status-pill pill-queued">~{r.secondsUntilDeparture}s</span>
+                            )}
+                          </div>
+                          <div className="jp-history-card-body" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                            <span className={`jp-history-mult-num mult-${r.category.toLowerCase()}`}>
+                              {r.crashPoint.toFixed(2)}x
+                            </span>
+                            <span className={`jp-cat-badge badge-${r.category.toLowerCase()}`}>
+                              {r.category}
+                            </span>
+                          </div>
+                          <div className="jp-history-card-footer">
+                            {r.isOverridden ? (
+                              <span className="jp-tag-override-sm">Overridden</span>
+                            ) : (
+                              <span className="jp-tag-natural-sm">Fair</span>
+                            )}
+                            <span className="jp-btn-edit-micro" title="Set Multiplier">✏️</span>
+                          </div>
                         </div>
-                        <div className="jp-history-card-body">
-                          <span className={`jp-history-mult-num mult-${pr.category.toLowerCase()}`}>
-                            {pr.crashPoint.toFixed(2)}x
-                          </span>
-                        </div>
-                        <div className="jp-history-card-footer">
-                          <span className="jp-history-ago">~{pr.completedAgoSeconds}s ago</span>
-                          {pr.isOverridden ? (
-                            <span className="jp-tag-override-sm">Overridden</span>
-                          ) : (
-                            <span className="jp-tag-natural-sm">Fair</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
               </section>
 
               {/* Right Column: House Profit Engine & Daily Target Calculator */}
@@ -1082,69 +1146,6 @@ export default function JetPesaAdminPage() {
                 </div>
               </section>
             </div>
-
-            {/* Flight Departure Schedule (Next 6 Rounds) */}
-            <section className="jp-admin-history-strip">
-              <div className="jp-history-strip-header">
-                <div className="jp-history-strip-title">
-                  <span className="jp-history-clock-icon">🚀</span>
-                  <h3>Flight Departure Schedule (Next 6 Rounds)</h3>
-                </div>
-                <span className="jp-panel-note">Live updating every 2.5s</span>
-              </div>
-
-              {roundsData.length === 0 ? (
-                <div className="jp-history-empty">
-                  <span>Calculating upcoming departure sequence...</span>
-                </div>
-              ) : (
-                <div className="jp-history-cards-grid">
-                  {roundsData.slice(0, 6).map((r) => (
-                    <div
-                      key={r.cycleIndex}
-                      className={`jp-history-card border-${r.category.toLowerCase()} ${r.isCurrent ? 'jp-card-live' : ''}`}
-                    >
-                      <div className="jp-history-card-top">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                          <span className="jp-history-round-label">Round #{r.cycleIndex}</span>
-                          {r.isCurrent ? (
-                            <span className="jp-status-pill pill-live">● LIVE</span>
-                          ) : (
-                            <span className="jp-status-pill pill-queued">⏱ ~{r.secondsUntilDeparture}s</span>
-                          )}
-                        </div>
-                        <span className={`jp-cat-badge badge-${r.category.toLowerCase()}`}>
-                          {r.category}
-                        </span>
-                      </div>
-                      <div className="jp-history-card-body">
-                        <span className={`jp-history-mult-num mult-${r.category.toLowerCase()}`}>
-                          {r.crashPoint.toFixed(2)}x
-                        </span>
-                      </div>
-                      <div className="jp-history-card-footer">
-                        {r.isOverridden ? (
-                          <span className="jp-tag-override-sm">Overridden</span>
-                        ) : (
-                          <span className="jp-tag-natural-sm">Provably Fair</span>
-                        )}
-                        <button
-                          className="jp-sm-btn"
-                          onClick={() => setOverrideModal({
-                            open: true,
-                            cycleIndex: r.cycleIndex,
-                            currentPoint: r.crashPoint,
-                            newPoint: r.crashPoint.toString(),
-                          })}
-                        >
-                          Set Multiplier
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
           </div>
         )}
 
@@ -1665,36 +1666,45 @@ export default function JetPesaAdminPage() {
         .jp-override-trigger-btn { background: linear-gradient(135deg, #e11d48, #be123c); color: #fff; border: none; padding: 7px 14px; border-radius: 8px; font-size: 11.5px; font-weight: 800; cursor: pointer; transition: transform .15s; }
         .jp-override-trigger-btn:hover { transform: translateY(-1px); }
 
-        /* Top Row Split: Compact History (Left) + House Profit Engine & Daily Target (Right) */
-        .jp-radar-top-grid { display: grid; grid-template-columns: 0.9fr 1.35fr; gap: 14px; margin-bottom: 18px; align-items: stretch; }
-        @media (max-width: 1160px) {
+        /* Top Row Split: Compact History + Next 6 Departure Schedule (Left) + House Profit Engine (Right) */
+        .jp-radar-top-grid { display: grid; grid-template-columns: 1fr 1.12fr; gap: 14px; margin-bottom: 18px; align-items: stretch; }
+        @media (max-width: 1200px) {
           .jp-radar-top-grid { grid-template-columns: 1fr; }
         }
 
-        /* History Strip (Last 5 Crash Points) - Compact */
-        .jp-admin-history-strip { background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 12px 14px; backdrop-filter: blur(10px); display: flex; flex-direction: column; justify-content: space-between; }
+        /* Combined Oracle Strip (Past 5 + Next 6 Departure Schedule) */
+        .jp-admin-history-strip { background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 10px 12px; backdrop-filter: blur(10px); display: flex; flex-direction: column; justify-content: space-between; }
         .jp-history-compact { margin-bottom: 0; }
-        .jp-history-strip-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
-        .jp-history-strip-title { display: flex; align-items: center; gap: 6px; }
-        .jp-history-strip-title h3 { margin: 0; font-size: 11px; font-weight: 800; color: #fff; letter-spacing: 0.02em; }
-        .jp-history-clock-icon { font-size: 11px; }
-        .jp-history-cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 6px; }
-        .jp-history-card { background: rgba(4, 7, 15, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; transition: transform 0.15s, border-color 0.15s; }
-        .jp-history-card:hover { transform: translateY(-1px); border-color: rgba(255, 255, 255, 0.2); }
-        .jp-history-card.border-instant { border-left: 2.5px solid #6b7280; }
-        .jp-history-card.border-low { border-left: 2.5px solid #60a5fa; }
-        .jp-history-card.border-high { border-left: 2.5px solid #c084fc; }
-        .jp-history-card.border-mega { border-left: 2.5px solid #fbbf24; }
-        .jp-history-card.jp-card-live { background: rgba(34, 197, 94, 0.08); border-color: rgba(34, 197, 94, 0.4); box-shadow: 0 0 16px rgba(34, 197, 94, 0.12); }
+        .jp-oracle-sub-section { display: flex; flex-direction: column; gap: 3px; }
+        .jp-oracle-divider { height: 1px; background: rgba(255, 255, 255, 0.07); margin: 6px 0 5px; }
+        .jp-history-strip-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; flex-wrap: wrap; gap: 4px; }
+        .jp-history-strip-title { display: flex; align-items: center; gap: 5px; }
+        .jp-history-strip-title h3 { margin: 0; font-size: 10px; font-weight: 800; color: #fff; letter-spacing: 0.02em; }
+        .jp-history-clock-icon { font-size: 10.5px; }
+        .jp-history-cards-grid { display: grid; gap: 4px; }
+        .jp-history-cards-grid.grid-5 { grid-template-columns: repeat(5, 1fr); }
+        .jp-history-cards-grid.grid-6 { grid-template-columns: repeat(6, 1fr); }
+        @media (max-width: 600px) {
+          .jp-history-cards-grid.grid-5, .jp-history-cards-grid.grid-6 { grid-template-columns: repeat(3, 1fr); }
+        }
+        .jp-history-card { background: rgba(4, 7, 15, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 7px; padding: 4px 6px; display: flex; flex-direction: column; gap: 2px; transition: transform 0.15s, border-color 0.15s; }
+        .jp-history-card:hover { transform: translateY(-1px); border-color: rgba(255, 255, 255, 0.22); }
+        .jp-history-card.border-instant { border-left: 2px solid #6b7280; }
+        .jp-history-card.border-low { border-left: 2px solid #60a5fa; }
+        .jp-history-card.border-high { border-left: 2px solid #c084fc; }
+        .jp-history-card.border-mega { border-left: 2px solid #fbbf24; }
+        .jp-history-card.jp-card-live { background: rgba(34, 197, 94, 0.09); border-color: rgba(34, 197, 94, 0.45); box-shadow: 0 0 12px rgba(34, 197, 94, 0.15); }
         .jp-history-card-top { display: flex; align-items: center; justify-content: space-between; }
-        .jp-history-round-label { font-size: 8px; font-weight: 800; color: #94a3b8; font-family: ui-monospace, monospace; }
+        .jp-history-round-label { font-size: 7.5px; font-weight: 800; color: #94a3b8; font-family: ui-monospace, monospace; }
         .jp-history-card-body { margin: 1px 0; }
-        .jp-history-mult-num { font-size: 14.5px; font-weight: 950; font-family: system-ui, sans-serif; line-height: 1; }
-        .jp-history-card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 7.5px; color: #64748b; font-weight: 700; margin-top: 1px; }
+        .jp-history-mult-num { font-size: 13.5px; font-weight: 950; font-family: system-ui, sans-serif; line-height: 1; }
+        .jp-history-card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 7px; color: #64748b; font-weight: 700; margin-top: 1px; }
         .jp-history-ago { color: #64748b; font-size: 7px; }
-        .jp-tag-override-sm { background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 1px 4px; border-radius: 3px; font-size: 7px; font-weight: 800; }
-        .jp-tag-natural-sm { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 1px 4px; border-radius: 3px; font-size: 7px; font-weight: 700; }
-        .jp-history-empty { text-align: center; padding: 12px; color: #64748b; font-size: 10px; }
+        .jp-tag-override-sm { background: rgba(244, 63, 94, 0.15); color: #fda4af; padding: 1px 3px; border-radius: 3px; font-size: 6.5px; font-weight: 800; }
+        .jp-tag-natural-sm { background: rgba(255,255,255,0.06); color: #94a3b8; padding: 1px 3px; border-radius: 3px; font-size: 6.5px; font-weight: 700; }
+        .jp-btn-edit-micro { font-size: 7.5px; cursor: pointer; opacity: 0.8; transition: transform 0.12s; }
+        .jp-btn-edit-micro:hover { transform: scale(1.15); opacity: 1; }
+        .jp-history-empty { text-align: center; padding: 10px; color: #64748b; font-size: 9.5px; }
 
         /* House Profit Engine & Daily Target Calculator Panel (Right of History) */
         .jp-profit-engine-panel {
