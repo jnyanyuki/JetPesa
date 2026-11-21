@@ -680,6 +680,28 @@ export default function UltimateJetPesaCockpit() {
     }
   };
 
+  const fetchMyBetsHistory = useCallback(async () => {
+    try {
+      const res = await fetch('/api/user/bets?limit=10');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.bets)) {
+          setMyBetsHistory(data.bets);
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching my bets history:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'mine') {
+      fetchMyBetsHistory();
+      const iv = setInterval(fetchMyBetsHistory, 3000);
+      return () => clearInterval(iv);
+    }
+  }, [activeTab, fetchMyBetsHistory]);
+
   useEffect(() => {
     const savedPhone = localStorage.getItem('jetpesa_saved_phone');
     if (savedPhone) {
@@ -708,6 +730,7 @@ export default function UltimateJetPesaCockpit() {
 
         // Fetch initial profile & balance from Postgres
         await refreshUserData();
+        await fetchMyBetsHistory();
 
         // Keep balance synchronized with server-side transactions & deposits
         pollInterval = setInterval(() => {
@@ -874,14 +897,17 @@ export default function UltimateJetPesaCockpit() {
         if (computedMultiplier >= effectiveCrash) {
           cycleCrashedRef.current = true;
           crashTimestampRef.current = epochTimeMs;
-          gameStatusRef.current = 'crashed';
-          setGameStatus('crashed');
-          setMultiplier(effectiveCrash);
-          updateLiveBetStatuses(effectiveCrash, effectiveCrash);
-          markLiveBetsCrashed();
-          persistCrashToHistory(effectiveCrash, cycleIndex);
-          setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
-          setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          if (gameStatusRef.current !== 'crashed') {
+            gameStatusRef.current = 'crashed';
+            setGameStatus('crashed');
+            setMultiplier(effectiveCrash);
+            updateLiveBetStatuses(effectiveCrash, effectiveCrash);
+            markLiveBetsCrashed();
+            persistCrashToHistory(effectiveCrash, cycleIndex);
+            setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+            setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+            fetchMyBetsHistory();
+          }
         } else {
           if (gameStatusRef.current !== 'running') {
             gameStatusRef.current = 'running';
@@ -910,14 +936,17 @@ export default function UltimateJetPesaCockpit() {
         if (!crashTimestampRef.current) crashTimestampRef.current = timing.crashEpoch || epochTimeMs;
 
         if (gameStatusRef.current !== 'crashed') {
-          gameStatusRef.current = 'crashed';
-          setGameStatus('crashed');
-          setMultiplier(effectiveCrash);
-          updateLiveBetStatuses(effectiveCrash, effectiveCrash);
-          markLiveBetsCrashed();
-          persistCrashToHistory(effectiveCrash, cycleIndex);
-          setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
-          setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+          if (gameStatusRef.current !== 'crashed') {
+            gameStatusRef.current = 'crashed';
+            setGameStatus('crashed');
+            setMultiplier(effectiveCrash);
+            updateLiveBetStatuses(effectiveCrash, effectiveCrash);
+            markLiveBetsCrashed();
+            persistCrashToHistory(effectiveCrash, cycleIndex);
+            setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+            setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
+            fetchMyBetsHistory();
+          }
         }
       }
 
@@ -1244,7 +1273,7 @@ export default function UltimateJetPesaCockpit() {
       if (typeof newBal === 'number') {
         setBalance(newBal);
       }
-      setMyBetsHistory((p) => [{ roundId: Date.now().toString().slice(-5), stake: activeState.wager, multiplier: data.multiplier, yieldAmount: data.winAmount, status: 'WON' }, ...p]);
+      fetchMyBetsHistory();
       playSynthesizedTone(523.25, 'sine', 0.15, 0.05);
       setTimeout(() => playSynthesizedTone(659.25, 'sine', 0.15, 0.05), 100);
       setTimeout(() => playSynthesizedTone(783.99, 'sine', 0.3, 0.06), 200);
@@ -1285,6 +1314,7 @@ export default function UltimateJetPesaCockpit() {
         if (!data.alreadyActive) {
           triggerToast(`Deck ${deckName} auto-stake KES ${state.wager} placed!`, 'success');
         }
+        fetchMyBetsHistory();
       } else {
         if (deckName === 'A') setDeckA((p) => ({ ...p, hasBetNext: false }));
         else setDeckB((p) => ({ ...p, hasBetNext: false }));
@@ -1351,6 +1381,7 @@ export default function UltimateJetPesaCockpit() {
       if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId }));
       else setDeckB((p) => ({ ...p, hasBetCurrent: true, currentBetId: data.betId }));
       triggerToast(`Deck ${targetDeck} wager confirmed: KES ${currentWagerAmount}`, 'success');
+      fetchMyBetsHistory();
     } catch (e) {
       triggerToast(e.message, 'error');
     }
@@ -1390,7 +1421,7 @@ export default function UltimateJetPesaCockpit() {
       }
       if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
       else setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
-      setMyBetsHistory((p) => [{ roundId: Date.now().toString().slice(-5), stake: targetState.wager, multiplier: data.multiplier, yieldAmount: data.winAmount, status: 'WON' }, ...p]);
+      fetchMyBetsHistory();
       playSynthesizedTone(587.33, 'sine', 0.12, 0.05);
       setTimeout(() => playSynthesizedTone(880.0, 'sine', 0.25, 0.05), 110);
       confetti({ particleCount: 60, spread: 50, origin: { y: 0.4 } });
@@ -1522,6 +1553,103 @@ export default function UltimateJetPesaCockpit() {
       )}
     </div>
   );
+
+  const renderMyBets = () => {
+    const totalStake = myBetsHistory.reduce((acc, b) => acc + (Number(b.stake) || 0), 0);
+    const totalWon = myBetsHistory.reduce((acc, b) => acc + (Number(b.winAmount) || 0), 0);
+    const netProfit = totalWon - totalStake;
+
+    return (
+      <div className="jp-panel-scroll">
+        {/* Top summary bar for user's last 10 bets */}
+        <div className="jp-my-bets-stats-bar">
+          <div className="jp-my-stat-chip">
+            <span className="jp-my-stat-label">RECORDED</span>
+            <span className="jp-my-stat-val">{myBetsHistory.length} / 10 BETS</span>
+          </div>
+          <div className="jp-my-stat-chip">
+            <span className="jp-my-stat-label">TOTAL STAKE</span>
+            <span className="jp-my-stat-val">KES {totalStake.toLocaleString()}</span>
+          </div>
+          <div className="jp-my-stat-chip">
+            <span className="jp-my-stat-label">TOTAL WON</span>
+            <span className="jp-my-stat-val jp-my-stat-green">KES {totalWon.toLocaleString()}</span>
+          </div>
+          <div className="jp-my-stat-chip">
+            <span className="jp-my-stat-label">NET PROFIT</span>
+            <span className={`jp-my-stat-val ${netProfit >= 0 ? 'jp-my-stat-green' : 'jp-my-stat-rose'}`}>
+              {netProfit >= 0 ? '+' : ''}KES {netProfit.toLocaleString()}
+            </span>
+          </div>
+        </div>
+
+        {/* Column Headers */}
+        <div className="jp-my-bets-head">
+          <span>Flight & Deck</span>
+          <span style={{ textAlign: 'right' }}>Stake</span>
+          <span style={{ textAlign: 'center' }}>Outcome</span>
+          <span style={{ textAlign: 'right' }}>Payout</span>
+        </div>
+
+        {myBetsHistory.length === 0 ? (
+          <div className="jp-empty-state">
+            <Icon name="jet" size={32} />
+            <strong>No bets recorded yet</strong>
+            <span>Your last 10 round bets will be logged here in real time.</span>
+          </div>
+        ) : (
+          myBetsHistory.slice(0, 10).map((b) => {
+            const isWon = b.status === 'WON';
+            const isCrashed = b.status === 'CRASHED' || b.status === 'LOST';
+            const isActive = b.status === 'ACTIVE';
+            const stakeVal = Number(b.stake || 0);
+            const winVal = Number(b.winAmount || 0);
+
+            return (
+              <div key={b.id || b.roundId} className={`jp-my-bet-card ${isWon ? 'jp-my-bet-card-won' : isCrashed ? 'jp-my-bet-card-lost' : 'jp-my-bet-card-active'}`}>
+                <div className="jp-my-bet-info">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className={`jp-my-deck-badge ${b.deck === 'B' ? 'jp-deck-b-badge' : 'jp-deck-a-badge'}`}>
+                      DECK {b.deck || 'A'}
+                    </span>
+                    <span className="jp-my-bet-round">#{b.roundId}</span>
+                  </div>
+                  <span className="jp-my-bet-time">{b.timeStr || ''}</span>
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <span className="jp-my-bet-stake">{stakeVal.toLocaleString()} KES</span>
+                  {b.autoCashout && (
+                    <span className="jp-my-bet-autocash">Auto: {Number(b.autoCashout).toFixed(2)}x</span>
+                  )}
+                </div>
+
+                <div style={{ textAlign: 'center' }}>
+                  {isWon ? (
+                    <span className="jp-badge jp-badge-win">{b.multiplier ? `${Number(b.multiplier).toFixed(2)}x` : 'WON'}</span>
+                  ) : isCrashed ? (
+                    <span className="jp-badge jp-badge-lost">{b.roundCrashPoint ? `@ ${Number(b.roundCrashPoint).toFixed(2)}x` : 'Lost'}</span>
+                  ) : (
+                    <span className="jp-badge jp-badge-flying">Flying</span>
+                  )}
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  {isWon ? (
+                    <span className="jp-my-bet-payout jp-payout-won">+{winVal.toLocaleString()} KES</span>
+                  ) : isCrashed ? (
+                    <span className="jp-my-bet-payout jp-payout-lost">-{stakeVal.toLocaleString()} KES</span>
+                  ) : (
+                    <span className="jp-my-bet-payout jp-payout-active">In Flight</span>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    );
+  };
 
   const renderDeckPanel = (name, deck, setter, color) => (
     <div key={name} className="jp-deck-panel">
@@ -1686,7 +1814,9 @@ export default function UltimateJetPesaCockpit() {
                 <span className="jp-live-dot-pulse" />
                 LIVE ({lobbyOnlineCount.toLocaleString()})
               </button>
-              <button onClick={() => setActiveTab('mine')} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>MY BETS</button>
+              <button onClick={() => { setActiveTab('mine'); fetchMyBetsHistory(); }} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>
+                MY BETS{myBetsHistory.length > 0 ? ` (${myBetsHistory.length})` : ''}
+              </button>
             </div>
             {activeTab === 'all' && (
               <div className="jp-live-summary-bar">
@@ -1721,20 +1851,7 @@ export default function UltimateJetPesaCockpit() {
                 </div>
               </div>
             )}
-            {activeTab === 'all' ? renderLiveBets() : (
-              <div className="jp-panel-scroll">
-                {myBetsHistory.length === 0 ? (
-                  <div className="jp-empty-state"><Icon name="bar-chart-3" size={32} /><strong>No local round wagers recorded.</strong></div>
-                ) : (
-                  myBetsHistory.map((m, i) => (
-                    <div key={i} className="jp-bet-history-row">
-                      <div><span className="jp-bet-history-round">ROUND #{m.roundId}</span><span className="jp-bet-history-stake">{m.stake} KES</span></div>
-                      <div style={{ textAlign: 'right' }}><span className="jp-bet-history-mult">{m.multiplier.toFixed(2)}x</span><span className="jp-bet-history-yield">+{m.yieldAmount.toFixed(1)}</span></div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+            {activeTab === 'all' ? renderLiveBets() : renderMyBets()}
           </div>
         </div>
 
@@ -2305,7 +2422,127 @@ export default function UltimateJetPesaCockpit() {
         .jp-badge-queue { color: #94a3b8; background: rgba(148,163,184,0.1); border: 1px solid rgba(148,163,184,0.15); }
         .jp-empty-state { height: 70%; display: flex; align-items: center; justify-content: center; flex-direction: column; color: #64748b; font-size: 12px; gap: 6px; text-align: center; }
 
-        /* === BET HISTORY === */
+        /* === MY BETS HISTORY === */
+        .jp-my-bets-stats-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 8px 12px;
+          background: rgba(0, 0, 0, 0.4);
+          border-radius: 10px;
+          margin-bottom: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          gap: 8px;
+        }
+        .jp-my-stat-chip {
+          display: flex;
+          flex-direction: column;
+        }
+        .jp-my-stat-label {
+          font-size: 8.5px;
+          font-weight: 800;
+          color: #64748b;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        .jp-my-stat-val {
+          font-size: 11.5px;
+          font-weight: 900;
+          color: #f8fafc;
+          font-variant-numeric: tabular-nums;
+        }
+        .jp-my-stat-green { color: #22c55e; }
+        .jp-my-stat-rose { color: #ef4444; }
+
+        .jp-my-bets-head {
+          display: grid;
+          grid-template-columns: 1.3fr 1fr 1fr 1.1fr;
+          font-size: 9.5px;
+          font-weight: 900;
+          color: #64748b;
+          text-transform: uppercase;
+          padding: 4px 8px 7px;
+          letter-spacing: 0.03em;
+        }
+
+        .jp-my-bet-card {
+          display: grid;
+          grid-template-columns: 1.3fr 1fr 1fr 1.1fr;
+          align-items: center;
+          padding: 7px 10px;
+          margin-bottom: 5px;
+          background: rgba(15, 23, 42, 0.6);
+          border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.04);
+          transition: background 0.15s ease, border-color 0.15s ease;
+        }
+        .jp-my-bet-card:hover {
+          background: rgba(15, 23, 42, 0.85);
+        }
+        .jp-my-bet-card-won {
+          border-left: 3px solid #22c55e;
+          background: rgba(34, 197, 94, 0.05);
+        }
+        .jp-my-bet-card-lost {
+          border-left: 3px solid rgba(239, 68, 68, 0.7);
+          background: rgba(239, 68, 68, 0.02);
+        }
+        .jp-my-bet-card-active {
+          border-left: 3px solid #38bdf8;
+          background: rgba(56, 189, 248, 0.06);
+        }
+
+        .jp-my-deck-badge {
+          font-size: 8px;
+          font-weight: 950;
+          padding: 1.5px 5px;
+          border-radius: 4px;
+          letter-spacing: 0.02em;
+        }
+        .jp-deck-a-badge {
+          background: rgba(34, 197, 94, 0.18);
+          color: #4ade80;
+          border: 1px solid rgba(34, 197, 94, 0.35);
+        }
+        .jp-deck-b-badge {
+          background: rgba(14, 165, 233, 0.18);
+          color: #38bdf8;
+          border: 1px solid rgba(14, 165, 233, 0.35);
+        }
+
+        .jp-my-bet-round {
+          font-size: 11px;
+          font-weight: 800;
+          color: #f8fafc;
+        }
+        .jp-my-bet-time {
+          font-size: 9px;
+          color: #64748b;
+          font-weight: 600;
+          display: block;
+        }
+        .jp-my-bet-stake {
+          font-size: 11px;
+          font-weight: 800;
+          color: #f8fafc;
+          font-variant-numeric: tabular-nums;
+          display: block;
+        }
+        .jp-my-bet-autocash {
+          font-size: 8.5px;
+          color: #94a3b8;
+          display: block;
+        }
+        .jp-my-bet-payout {
+          font-size: 11px;
+          font-weight: 900;
+          font-variant-numeric: tabular-nums;
+          display: block;
+        }
+        .jp-payout-won { color: #22c55e; }
+        .jp-payout-lost { color: #ef4444; }
+        .jp-payout-active { color: #38bdf8; }
+
         .jp-bet-history-row { display: flex; justify-content: space-between; padding: 8px; background: rgba(0,0,0,0.15); border-radius: 8px; margin-bottom: 5px; font-size: 11px; border: 1px solid rgba(255,255,255,0.02); }
         .jp-bet-history-round { color: #64748b; display: block; font-size: 9px; }
         .jp-bet-history-stake { font-weight: 800; }
