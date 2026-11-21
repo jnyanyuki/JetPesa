@@ -9,11 +9,15 @@ import {
   triggerInstantCrash,
   setRoundProfitTarget,
   getRoundProfitTarget,
+  getGlobalProfitTarget,
+  setGlobalProfitTarget,
 } from '../../../../lib/gameEngine';
 import {
   evaluateAndEnforceProfitTarget,
   setRoundProfitTargetDb,
   clearRoundProfitTargetDb,
+  setGlobalProfitTargetDb,
+  loadGlobalProfitTargetFromDb,
 } from '../../../../lib/profitTargetEngine';
 
 export const dynamic = 'force-dynamic';
@@ -29,8 +33,10 @@ export async function GET(request) {
     const startNonce = searchParams.get('startNonce') ? parseInt(searchParams.get('startNonce'), 10) : null;
     const pastCount = Math.min(20, Math.max(1, parseInt(searchParams.get('pastCount') || '5', 10)));
 
-    // Preload any persistent overrides from PostgreSQL
+    // Preload system-wide settings and overrides from PostgreSQL
     try {
+      await loadGlobalProfitTargetFromDb();
+
       const dbOverrides = await sql.query(`
         SELECT round_id, crash_point, target_profit_percent, target_profit_kes FROM public.round_overrides
       `);
@@ -164,6 +170,7 @@ export async function GET(request) {
           reason: profitTargetEval.reason,
           isSecured: profitTargetEval.isSecured,
           currentHouseProfit: totalStaked - totalWon,
+          globalConfig: getGlobalProfitTarget(),
           nextRoundTarget: getRoundProfitTarget(data.currentCycleIndex + 1),
         };
       } catch (pte) {
@@ -282,6 +289,7 @@ export async function GET(request) {
     return NextResponse.json({
       success: true,
       ...data,
+      globalProfitTarget: getGlobalProfitTarget(),
       inFlightStats,
       dailyStats,
     });
@@ -297,10 +305,22 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { cycleIndex, crashPoint, note, instantCrash, action, targetProfitPercent, targetProfitKes } = body;
+    const { action, enabled, percent, cycleIndex, crashPoint, note, instantCrash, targetProfitPercent, targetProfitKes } = body;
+
+    // 1. System-wide Global Profit Target (Affects ALL rounds continuously)
+    if (action === 'setGlobalProfitTarget' || action === 'toggleProfitTarget' || action === 'setGlobalTarget' || body.globalProfitTarget !== undefined) {
+      const isEnabled = enabled !== undefined ? enabled : body.globalProfitTarget?.enabled;
+      const targetPct = percent !== undefined ? percent : (targetProfitPercent || body.globalProfitTarget?.percent);
+      const result = await setGlobalProfitTargetDb(isEnabled, targetPct);
+      return NextResponse.json({
+        success: true,
+        ...result,
+        globalProfitTarget: getGlobalProfitTarget(),
+      });
+    }
 
     if (!cycleIndex) {
-      return NextResponse.json({ success: false, message: 'cycleIndex is required.' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'cycleIndex is required for round-specific actions.' }, { status: 400 });
     }
 
     const roundId = String(cycleIndex);

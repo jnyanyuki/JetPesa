@@ -28,9 +28,9 @@ export default function JetPesaAdminPage() {
   const [instantCrashing, setInstantCrashing] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // Per-Round House Profit Target mechanism state
+  // System-wide Global House Profit Target mechanism state (affects all rounds continuously)
   const [profitTargetInput, setProfitTargetInput] = useState('50');
-  const [profitTargetRoundMode, setProfitTargetRoundMode] = useState('current'); // 'current' | 'next'
+  const [profitTargetEnabled, setProfitTargetEnabled] = useState(false);
   const [profitTargetLoading, setProfitTargetLoading] = useState(false);
 
   const pollTimerRef = useRef(null);
@@ -102,6 +102,12 @@ export default function JetPesaAdminPage() {
         setCurrentCycleState(data.currentState || null);
         if (data.inFlightStats) setInFlightStats(data.inFlightStats);
         if (data.dailyStats) setDailyStats(data.dailyStats);
+        if (data.globalProfitTarget) {
+          setProfitTargetEnabled(Boolean(data.globalProfitTarget.enabled));
+          if (data.globalProfitTarget.percent !== undefined && data.globalProfitTarget.percent !== null) {
+            setProfitTargetInput(String(data.globalProfitTarget.percent));
+          }
+        }
       }
     } catch (e) {
       console.warn('Radar error:', e);
@@ -259,23 +265,11 @@ export default function JetPesaAdminPage() {
     }
   };
 
-  // Configure Per-Round House Percentage Profit Target
-  const handleSetProfitTarget = async () => {
-    const curRoundId = inFlightStats?.roundId || currentCycleState?.currentCycleIndex || currentCycleState?.cycleIndex;
-    const targetRound = profitTargetRoundMode === 'next'
-      ? (curRoundId ? Number(curRoundId) + 1 : null)
-      : (curRoundId ? Number(curRoundId) : null);
-
-    if (!targetRound) {
-      showToast('Game engine round telemetry not ready.', 'error');
-      return;
-    }
-
+  // Toggle System-Wide House Profit Target ON / OFF across ALL rounds
+  const handleToggleProfitTarget = async () => {
+    const nextState = !profitTargetEnabled;
     const val = parseFloat(profitTargetInput);
-    if (isNaN(val) || val < 1 || val > 100) {
-      showToast('Please enter a valid percentage profit target between 1% and 100%.', 'error');
-      return;
-    }
+    const safeVal = isNaN(val) || val < 1 || val > 100 ? 50 : val;
 
     setProfitTargetLoading(true);
     try {
@@ -283,14 +277,19 @@ export default function JetPesaAdminPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          cycleIndex: targetRound,
-          action: 'setProfitTarget',
-          targetProfitPercent: val,
+          action: 'setGlobalProfitTarget',
+          enabled: nextState,
+          percent: safeVal,
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to lock profit target.');
-      showToast(data.message || `🎯 House profit target of ${val}% locked for Round #${targetRound}!`);
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to toggle profit target.');
+      setProfitTargetEnabled(nextState);
+      showToast(
+        nextState 
+          ? `🎯 System Profit Target ACTIVATED (${safeVal}% on all rounds continuously)!` 
+          : 'System Profit Target DISABLED (Provably Fair natural flight enabled).'
+      );
       await loadRoundsRadar();
     } catch (err) {
       showToast(err.message, 'error');
@@ -299,14 +298,13 @@ export default function JetPesaAdminPage() {
     }
   };
 
-  // Clear House Profit Target
-  const handleClearProfitTarget = async () => {
-    const curRoundId = inFlightStats?.roundId || currentCycleState?.currentCycleIndex || currentCycleState?.cycleIndex;
-    const targetRound = profitTargetRoundMode === 'next'
-      ? (curRoundId ? Number(curRoundId) + 1 : null)
-      : (curRoundId ? Number(curRoundId) : null);
-
-    if (!targetRound) return;
+  // Save / Update Profit Target Percentage across ALL rounds
+  const handleSaveProfitPercent = async () => {
+    const val = parseFloat(profitTargetInput);
+    if (isNaN(val) || val < 1 || val > 100) {
+      showToast('Please enter a percentage profit target between 1% and 100%.', 'error');
+      return;
+    }
 
     setProfitTargetLoading(true);
     try {
@@ -314,13 +312,14 @@ export default function JetPesaAdminPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          cycleIndex: targetRound,
-          action: 'clearProfitTarget',
+          action: 'setGlobalProfitTarget',
+          enabled: profitTargetEnabled,
+          percent: val,
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to clear profit target.');
-      showToast(data.message || `Profit target cleared for Round #${targetRound}.`);
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to update profit target.');
+      showToast(`🎯 System Profit Target set to ${val}% across all rounds.`);
       await loadRoundsRadar();
     } catch (err) {
       showToast(err.message, 'error');
@@ -416,16 +415,7 @@ export default function JetPesaAdminPage() {
   /* ------------------------------------------------------------------------ */
 
   const curRoundId = inFlightStats?.roundId || currentCycleState?.currentCycleIndex || currentCycleState?.cycleIndex;
-  const activeProfitRoundId = profitTargetRoundMode === 'next'
-    ? (curRoundId ? Number(curRoundId) + 1 : null)
-    : (curRoundId ? Number(curRoundId) : null);
-
   const profitTargetData = inFlightStats?.profitTarget;
-  const isTargetForThisRound = profitTargetRoundMode === 'current';
-  const activeTargetPercent = isTargetForThisRound
-    ? (profitTargetData?.targetProfitPercent ?? null)
-    : (profitTargetData?.nextRoundTarget ?? null);
-  const hasActiveTargetForSelectedRound = activeTargetPercent !== null && activeTargetPercent !== undefined;
 
   return (
     <div className="jp-admin-app">
@@ -443,34 +433,29 @@ export default function JetPesaAdminPage() {
           <h1>JETPESA ORACLE</h1>
         </div>
 
-        {/* Per-Round House Percentage Profit Target Strip Control */}
+        {/* System-Wide Continuous Percentage Profit Target Strip */}
         <div className="jp-admin-profit-strip">
           <div className="jp-profit-left-group">
             <span className="jp-profit-badge-label">
               <span className="jp-profit-target-icon">🎯</span>
-              <span className="jp-profit-title">PROFIT TARGET</span>
-              <span className="jp-profit-round-num">#{activeProfitRoundId || '---'}</span>
+              <span className="jp-profit-title">SYSTEM PROFIT TARGET</span>
             </span>
-            <div className="jp-profit-round-toggle">
-              <button
-                type="button"
-                className={`jp-profit-toggle-btn ${profitTargetRoundMode === 'current' ? 'active' : ''}`}
-                onClick={() => setProfitTargetRoundMode('current')}
-                title="Target active live round"
-              >
-                THIS RD
-              </button>
-              <button
-                type="button"
-                className={`jp-profit-toggle-btn ${profitTargetRoundMode === 'next' ? 'active' : ''}`}
-                onClick={() => setProfitTargetRoundMode('next')}
-                title="Target upcoming next round"
-              >
-                NEXT RD
-              </button>
+
+            {/* Interactive ON / OFF Toggle Switch */}
+            <div 
+              className={`jp-profit-toggle-switch ${profitTargetEnabled ? 'active' : ''}`}
+              onClick={handleToggleProfitTarget}
+              title={profitTargetEnabled ? 'Click to disable system profit target' : 'Click to enable system profit target on all rounds'}
+            >
+              <div className="jp-toggle-knob" />
             </div>
+
+            <span className={`jp-profit-toggle-label ${profitTargetEnabled ? 'on' : 'off'}`}>
+              {profitTargetEnabled ? 'ON' : 'OFF'}
+            </span>
           </div>
 
+          {/* Percentage Target Input */}
           <div className="jp-profit-input-group">
             <div className="jp-profit-input-wrap">
               <input
@@ -481,78 +466,48 @@ export default function JetPesaAdminPage() {
                 placeholder="50"
                 value={profitTargetInput}
                 onChange={(e) => setProfitTargetInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveProfitPercent(); }}
                 className="jp-profit-input"
-                title="Enter percentage profit target (1% to 100%)"
+                title="Percentage house profit target applied to all rounds (1% to 100%)"
               />
               <span className="jp-profit-currency">%</span>
             </div>
-            <div className="jp-profit-preset-group">
-              {[20, 35, 50, 70, 85, 100].map((pct) => (
-                <button
-                  key={pct}
-                  type="button"
-                  className="jp-profit-preset-btn"
-                  onClick={() => setProfitTargetInput(String(pct))}
-                  title={`Set preset ${pct}% profit target`}
-                >
-                  {pct}%
-                </button>
-              ))}
-            </div>
+            <button
+              type="button"
+              className="jp-profit-apply-btn"
+              onClick={handleSaveProfitPercent}
+              disabled={profitTargetLoading || !profitTargetInput}
+              title="Save percentage target for all rounds"
+            >
+              {profitTargetLoading ? '...' : 'SET'}
+            </button>
           </div>
 
+          {/* Live Status Display across all rounds */}
           <div className="jp-profit-status-display">
-            {hasActiveTargetForSelectedRound ? (
+            {profitTargetEnabled ? (
               <div
                 className={`jp-profit-status-badge ${profitTargetData?.isSecured ? 'secured' : 'active'}`}
-                title={profitTargetData?.reason || 'Percentage profit target active'}
+                title={profitTargetData?.reason || `System enforces ${profitTargetInput}% profit across all rounds`}
               >
                 <span className={`jp-profit-indicator-dot ${profitTargetData?.isSecured ? 'secured' : 'active'}`} />
                 <span className="jp-profit-target-val">
-                  {activeTargetPercent}% TARGET
+                  ALL ROUNDS: {profitTargetInput}% TARGET
                 </span>
-                {isTargetForThisRound && profitTargetData?.targetProfitKes > 0 && (
-                  <span className="jp-profit-kes-val">
-                    ≈ KES {Number(profitTargetData.targetProfitKes).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                  </span>
-                )}
-                {isTargetForThisRound && profitTargetData?.safeMultiplierCap && (
+                {profitTargetData?.safeMultiplierCap && (
                   <span className="jp-profit-cap-tag">
-                    CAP {profitTargetData.safeMultiplierCap.toFixed(2)}x
+                    RD #{curRoundId}: CAP {profitTargetData.safeMultiplierCap.toFixed(2)}x
                   </span>
                 )}
-                {isTargetForThisRound && profitTargetData?.isSecured && (
+                {profitTargetData?.isSecured && (
                   <span className="jp-profit-secured-tag">SECURED</span>
                 )}
               </div>
             ) : (
-              <div className="jp-profit-status-badge idle" title="No profit target configured for this round">
+              <div className="jp-profit-status-badge idle" title="System profit target is OFF. All rounds use natural Provably Fair seed.">
                 <span className="jp-profit-indicator-dot idle" />
-                <span>OFF</span>
+                <span>OFF (PROVABLY FAIR)</span>
               </div>
-            )}
-          </div>
-
-          <div className="jp-profit-btn-group">
-            <button
-              type="button"
-              className="jp-profit-lock-btn"
-              onClick={handleSetProfitTarget}
-              disabled={profitTargetLoading || !profitTargetInput}
-              title="Lock percentage profit target & enforce house crash cap"
-            >
-              {profitTargetLoading ? 'LOCKING...' : 'LOCK TARGET'}
-            </button>
-            {hasActiveTargetForSelectedRound && (
-              <button
-                type="button"
-                className="jp-profit-clear-btn"
-                onClick={handleClearProfitTarget}
-                disabled={profitTargetLoading}
-                title="Clear profit target & restore Provably Fair natural flight"
-              >
-                CLEAR
-              </button>
             )}
           </div>
         </div>
@@ -1466,24 +1421,31 @@ export default function JetPesaAdminPage() {
         .jp-admin-brand h1 { margin: 0; font-size: 13px; font-weight: 900; letter-spacing: 0.05em; color: #fff; }
         .jp-admin-pill { background: linear-gradient(135deg, #e11d48, #be123c); color: #fff; font-size: 8.5px; font-weight: 900; padding: 2px 6px; border-radius: 999px; }
 
-        /* Per-Round House Profit Target Strip */
+        /* System-Wide Continuous House Profit Target Strip */
         .jp-admin-profit-strip { display: flex; align-items: center; gap: 8px; background: rgba(11, 19, 38, 0.9); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 9px; padding: 4px 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), inset 0 0 12px rgba(16, 185, 129, 0.05); }
         .jp-profit-left-group { display: flex; align-items: center; gap: 6px; }
         .jp-profit-badge-label { display: flex; align-items: center; gap: 4px; font-weight: 900; font-size: 10px; color: #10b981; letter-spacing: 0.04em; }
         .jp-profit-target-icon { font-size: 11px; }
         .jp-profit-title { color: #e2e8f0; font-size: 9.5px; font-weight: 800; }
-        .jp-profit-round-num { color: #34d399; background: rgba(16, 185, 129, 0.16); padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 9.5px; }
-        .jp-profit-round-toggle { display: flex; background: #090d16; border-radius: 5px; padding: 1px; border: 1px solid rgba(255, 255, 255, 0.08); }
-        .jp-profit-toggle-btn { background: transparent; border: none; color: #64748b; font-size: 8.5px; font-weight: 800; padding: 2px 5px; border-radius: 4px; cursor: pointer; transition: all 0.15s; }
-        .jp-profit-toggle-btn.active { background: #1e293b; color: #38bdf8; box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+        
+        /* Interactive ON / OFF Toggle Switch */
+        .jp-profit-toggle-switch { position: relative; width: 34px; height: 18px; background: #1e293b; border-radius: 999px; cursor: pointer; transition: background 0.2s, box-shadow 0.2s, border-color 0.2s; border: 1px solid rgba(255, 255, 255, 0.15); display: inline-block; vertical-align: middle; }
+        .jp-profit-toggle-switch.active { background: #059669; border-color: #34d399; box-shadow: 0 0 8px rgba(16, 185, 129, 0.45); }
+        .jp-toggle-knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: #ffffff; border-radius: 999px; transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+        .jp-profit-toggle-switch.active .jp-toggle-knob { transform: translateX(16px); }
+        .jp-profit-toggle-label { font-size: 9px; font-weight: 900; letter-spacing: 0.05em; min-width: 22px; }
+        .jp-profit-toggle-label.on { color: #34d399; }
+        .jp-profit-toggle-label.off { color: #64748b; }
+
         .jp-profit-input-group { display: flex; align-items: center; gap: 4px; }
         .jp-profit-input-wrap { display: flex; align-items: center; background: #040814; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 5px; padding: 2px 6px; gap: 3px; }
         .jp-profit-currency { font-size: 10px; font-weight: 900; color: #10b981; }
-        .jp-profit-input { width: 38px; background: transparent; border: none; outline: none; color: #fff; font-weight: 900; font-size: 11px; font-family: ui-monospace, monospace; text-align: right; }
+        .jp-profit-input { width: 34px; background: transparent; border: none; outline: none; color: #fff; font-weight: 900; font-size: 11px; font-family: ui-monospace, monospace; text-align: right; }
         .jp-profit-input::-webkit-inner-spin-button, .jp-profit-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        .jp-profit-preset-group { display: flex; gap: 2px; }
-        .jp-profit-preset-btn { background: #111827; border: 1px solid rgba(255, 255, 255, 0.08); color: #94a3b8; font-size: 8.5px; font-weight: 800; padding: 2px 4px; border-radius: 4px; cursor: pointer; transition: all 0.12s; }
-        .jp-profit-preset-btn:hover { color: #fff; background: #1f2937; border-color: rgba(16, 185, 129, 0.4); }
+        .jp-profit-apply-btn { background: #1e293b; color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: 800; cursor: pointer; transition: all 0.15s; }
+        .jp-profit-apply-btn:hover:not(:disabled) { background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #fff; }
+        .jp-profit-apply-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
         .jp-profit-status-display { display: flex; align-items: center; }
         .jp-profit-status-badge { display: flex; align-items: center; gap: 5px; padding: 2px 7px; border-radius: 5px; font-size: 9.5px; font-weight: 800; }
         .jp-profit-status-badge.active { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; }
@@ -1494,15 +1456,8 @@ export default function JetPesaAdminPage() {
         .jp-profit-indicator-dot.secured { background: #38bdf8; box-shadow: 0 0 6px #38bdf8; }
         .jp-profit-indicator-dot.idle { background: #475569; }
         .jp-profit-target-val { font-family: ui-monospace, monospace; font-weight: 900; }
-        .jp-profit-kes-val { font-size: 8.5px; color: #94a3b8; font-weight: 700; font-family: ui-monospace, monospace; margin-left: 2px; }
         .jp-profit-cap-tag { background: #0f172a; border: 1px solid rgba(245, 158, 11, 0.5); color: #fbbf24; padding: 1px 4px; border-radius: 3px; font-size: 8.5px; font-weight: 900; }
         .jp-profit-secured-tag { background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.5); color: #38bdf8; padding: 1px 4px; border-radius: 3px; font-size: 8px; font-weight: 900; }
-        .jp-profit-btn-group { display: flex; align-items: center; gap: 4px; }
-        .jp-profit-lock-btn { background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; border: none; padding: 4px 9px; border-radius: 5px; font-size: 9.5px; font-weight: 900; letter-spacing: 0.02em; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3); white-space: nowrap; }
-        .jp-profit-lock-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(16, 185, 129, 0.45); }
-        .jp-profit-lock-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .jp-profit-clear-btn { background: #1e293b; color: #94a3b8; border: 1px solid rgba(255, 255, 255, 0.1); padding: 4px 6px; border-radius: 5px; font-size: 9px; font-weight: 800; cursor: pointer; transition: all 0.12s; white-space: nowrap; }
-        .jp-profit-clear-btn:hover:not(:disabled) { color: #f43f5e; border-color: rgba(244, 63, 94, 0.4); }
         
         .jp-admin-telemetry { display: flex; align-items: center; }
         .jp-admin-live-badge { display: flex; align-items: center; gap: 6px; background: #090d16; border: 1px solid rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 800; }
