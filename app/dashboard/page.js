@@ -299,8 +299,8 @@ export default function UltimateJetPesaCockpit() {
       return count;
     }
     const currentBets = otherGamesLiveBets[activeGameId] || [];
-    return (activeGameFeedConfig?.onlineBase || 1500) + currentBets.length;
-  }, [activeGameId, activePlayersCount, deckA.hasBetCurrent, deckB.hasBetCurrent, otherGamesLiveBets, activeGameFeedConfig]);
+    return currentBets.length;
+  }, [activeGameId, activePlayersCount, deckA.hasBetCurrent, deckB.hasBetCurrent, otherGamesLiveBets]);
 
   const totalLivePlaced = useMemo(() => {
     if (activeGameId === 'aviator') {
@@ -2252,7 +2252,7 @@ export default function UltimateJetPesaCockpit() {
             <div className="jp-tab-bar">
               <button onClick={() => setActiveTab('all')} className={`jp-tab ${activeTab === 'all' ? 'jp-active' : ''}`}>
                 <span className="jp-live-dot-pulse" />
-                LIVE ({displayActivePlayers.toLocaleString()})
+                LIVE ({lobbyOnlineCount.toLocaleString()})
               </button>
               <button onClick={() => { setActiveTab('mine'); fetchMyBetsHistory(); }} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>
                 MY BETS{myBetsHistory.length > 0 ? ` (${myBetsHistory.length})` : ''}
