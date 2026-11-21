@@ -724,7 +724,7 @@ export default function UltimateJetPesaCockpit() {
       if (paramGame && ['aviator', 'mines', 'plinko', 'dice', 'penalty', 'coinflip', 'hilo', 'roulette'].includes(paramGame.toLowerCase())) {
         setActiveGameId(paramGame.toLowerCase());
       }
-    } catch {}
+    } catch { }
 
     let isMounted = true;
     let pollInterval = null;
@@ -978,19 +978,19 @@ export default function UltimateJetPesaCockpit() {
         if (gameStatusRef.current !== 'crashed') {
           gameStatusRef.current = 'crashed';
           setGameStatus('crashed');
-            setMultiplier(effectiveCrash);
-            updateLiveBetStatuses(effectiveCrash, effectiveCrash);
-            markLiveBetsCrashed();
-            persistCrashToHistory(effectiveCrash, cycleIndex);
-            setDeckA((p) => {
-              const stillAuto = p.isAutoBet && balance >= p.wager;
-              return { ...p, hasBetCurrent: false, currentBetId: null, isAutoBet: stillAuto, hasBetNext: stillAuto };
-            });
-            setDeckB((p) => {
-              const stillAuto = p.isAutoBet && balance >= p.wager;
-              return { ...p, hasBetCurrent: false, currentBetId: null, isAutoBet: stillAuto, hasBetNext: stillAuto };
-            });
-            fetchMyBetsHistory();
+          setMultiplier(effectiveCrash);
+          updateLiveBetStatuses(effectiveCrash, effectiveCrash);
+          markLiveBetsCrashed();
+          persistCrashToHistory(effectiveCrash, cycleIndex);
+          setDeckA((p) => {
+            const stillAuto = p.isAutoBet && balance >= p.wager;
+            return { ...p, hasBetCurrent: false, currentBetId: null, isAutoBet: stillAuto, hasBetNext: stillAuto };
+          });
+          setDeckB((p) => {
+            const stillAuto = p.isAutoBet && balance >= p.wager;
+            return { ...p, hasBetCurrent: false, currentBetId: null, isAutoBet: stillAuto, hasBetNext: stillAuto };
+          });
+          fetchMyBetsHistory();
         }
       }
 
@@ -1560,7 +1560,7 @@ export default function UltimateJetPesaCockpit() {
       return;
     }
     if (!user?.uid && !user?.id) { triggerToast('Login session expired. Please sign in again.', 'error'); return; }
-    
+
     setLoadingDeposit(true);
     try {
       const res = await fetch('/api/printpay/c2b', {
@@ -2134,6 +2134,14 @@ export default function UltimateJetPesaCockpit() {
               onOpenDeposit={() => setIsDepositModalOpen(true)}
               onOpenProvably={openProvablyModal}
             />
+          ) : activeGameId === 'hilo' ? (
+            <HiloGame
+              balance={balance}
+              onBalanceChange={setBalance}
+              triggerToast={triggerToast}
+              onOpenDeposit={() => setIsDepositModalOpen(true)}
+              onOpenProvably={openProvablyModal}
+            />
           ) : (
             <GamePlaceholder
               gameId={activeGameId}
@@ -2557,7 +2565,8 @@ export default function UltimateJetPesaCockpit() {
         </div>
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         /* === BASE === */
         .jp-cockpit {
           background: #020617;
