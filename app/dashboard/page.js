@@ -147,48 +147,25 @@ export default function UltimateJetPesaCockpit() {
   const [loadingWithdraw, setLoadingWithdraw] = useState(false);
 
   const [deckA, setDeckA] = useState({
-    wager: MIN_WAGER,
+    wager: 50,
     isAuto: false,
     isAutoBet: false,
-    autoRoundsTotal: 10,
-    autoRoundsLeft: 10,
-    autoStopLoss: null,
-    autoStopWin: null,
-    autoStopProfit: null,
-    autoStartBalance: 0,
     isAutoCash: false,
-    cashVal: 2.0,
+    cashVal: 2.55,
     hasBetNext: false,
     hasBetCurrent: false,
     currentBetId: null,
   });
 
   const [deckB, setDeckB] = useState({
-    wager: 20,
+    wager: 500,
     isAuto: false,
     isAutoBet: false,
-    autoRoundsTotal: 10,
-    autoRoundsLeft: 10,
-    autoStopLoss: null,
-    autoStopWin: null,
-    autoStopProfit: null,
-    autoStartBalance: 0,
     isAutoCash: false,
-    cashVal: 3.0,
+    cashVal: 5.50,
     hasBetNext: false,
     hasBetCurrent: false,
     currentBetId: null,
-  });
-
-  const [autoSettingsModalDeck, setAutoSettingsModalDeck] = useState(null);
-  const [autoTempSettings, setAutoTempSettings] = useState({
-    rounds: 10,
-    enableStopLoss: false,
-    stopLoss: '200',
-    enableStopWin: false,
-    stopWin: '500',
-    enableStopProfit: false,
-    stopProfit: '1000',
   });
 
   const [multiplier, setMultiplier] = useState(1.0);
@@ -905,7 +882,7 @@ export default function UltimateJetPesaCockpit() {
         if (remainingMs % 1000 < 20) playSynthesizedTone(320, 'sine', 0.03, 0.02);
 
         // Auto Bet automated queueing
-        if (deckA.isAutoBet && !deckA.hasBetCurrent && !deckA.hasBetNext && deckA.autoRoundsLeft > 0) {
+        if (deckA.isAutoBet && !deckA.hasBetCurrent && !deckA.hasBetNext) {
           if (balance >= deckA.wager) {
             setDeckA((p) => ({ ...p, hasBetNext: true }));
           } else {
@@ -913,7 +890,7 @@ export default function UltimateJetPesaCockpit() {
             triggerToast('Deck A: Auto Bet stopped - insufficient wallet balance.', 'error');
           }
         }
-        if (deckB.isAutoBet && !deckB.hasBetCurrent && !deckB.hasBetNext && deckB.autoRoundsLeft > 0) {
+        if (deckB.isAutoBet && !deckB.hasBetCurrent && !deckB.hasBetNext) {
           if (balance >= deckB.wager) {
             setDeckB((p) => ({ ...p, hasBetNext: true }));
           } else {
@@ -956,19 +933,11 @@ export default function UltimateJetPesaCockpit() {
             markLiveBetsCrashed();
             persistCrashToHistory(effectiveCrash, cycleIndex);
             setDeckA((p) => {
-              let stillAuto = p.isAutoBet;
-              if (p.isAutoBet && p.autoStopLoss && (p.autoStartBalance - (balance - p.wager)) >= p.autoStopLoss) {
-                stillAuto = false;
-                triggerToast(`Deck A: Auto Bet stopped - stop-loss limit (KES ${p.autoStopLoss}) reached.`, 'info');
-              }
+              const stillAuto = p.isAutoBet && balance >= p.wager;
               return { ...p, hasBetCurrent: false, currentBetId: null, isAutoBet: stillAuto, hasBetNext: stillAuto };
             });
             setDeckB((p) => {
-              let stillAuto = p.isAutoBet;
-              if (p.isAutoBet && p.autoStopLoss && (p.autoStartBalance - (balance - p.wager)) >= p.autoStopLoss) {
-                stillAuto = false;
-                triggerToast(`Deck B: Auto Bet stopped - stop-loss limit (KES ${p.autoStopLoss}) reached.`, 'info');
-              }
+              const stillAuto = p.isAutoBet && balance >= p.wager;
               return { ...p, hasBetCurrent: false, currentBetId: null, isAutoBet: stillAuto, hasBetNext: stillAuto };
             });
             fetchMyBetsHistory();
@@ -1008,19 +977,11 @@ export default function UltimateJetPesaCockpit() {
             markLiveBetsCrashed();
             persistCrashToHistory(effectiveCrash, cycleIndex);
             setDeckA((p) => {
-              let stillAuto = p.isAutoBet;
-              if (p.isAutoBet && p.autoStopLoss && (p.autoStartBalance - (balance - p.wager)) >= p.autoStopLoss) {
-                stillAuto = false;
-                triggerToast(`Deck A: Auto Bet stopped - stop-loss limit (KES ${p.autoStopLoss}) reached.`, 'info');
-              }
+              const stillAuto = p.isAutoBet && balance >= p.wager;
               return { ...p, hasBetCurrent: false, currentBetId: null, isAutoBet: stillAuto, hasBetNext: stillAuto };
             });
             setDeckB((p) => {
-              let stillAuto = p.isAutoBet;
-              if (p.isAutoBet && p.autoStopLoss && (p.autoStartBalance - (balance - p.wager)) >= p.autoStopLoss) {
-                stillAuto = false;
-                triggerToast(`Deck B: Auto Bet stopped - stop-loss limit (KES ${p.autoStopLoss}) reached.`, 'info');
-              }
+              const stillAuto = p.isAutoBet && balance >= p.wager;
               return { ...p, hasBetCurrent: false, currentBetId: null, isAutoBet: stillAuto, hasBetNext: stillAuto };
             });
             fetchMyBetsHistory();
@@ -1352,21 +1313,7 @@ export default function UltimateJetPesaCockpit() {
       }
       fetchMyBetsHistory();
 
-      // Check Auto Bet win limits
-      if (activeState.isAutoBet) {
-        const isA = deckName === 'A';
-        const winAmt = Number(data.winAmount || 0);
-        if (activeState.autoStopWin && winAmt >= activeState.autoStopWin) {
-          if (isA) setDeckA((p) => ({ ...p, isAutoBet: false, hasBetNext: false }));
-          else setDeckB((p) => ({ ...p, isAutoBet: false, hasBetNext: false }));
-          triggerToast(`Deck ${deckName}: Auto Bet stopped - single win KES ${winAmt.toFixed(2)} reached limit.`, 'info');
-        } else if (activeState.autoStopProfit && typeof newBal === 'number' && (newBal - activeState.autoStartBalance) >= activeState.autoStopProfit) {
-          if (isA) setDeckA((p) => ({ ...p, isAutoBet: false, hasBetNext: false }));
-          else setDeckB((p) => ({ ...p, isAutoBet: false, hasBetNext: false }));
-          triggerToast(`Deck ${deckName}: Auto Bet stopped - profit target reached (+KES ${(newBal - activeState.autoStartBalance).toFixed(2)})!`, 'success');
-        }
-      }
-
+      // Keep Auto Bet cycle uninterrupted
       playSynthesizedTone(523.25, 'sine', 0.15, 0.05);
       setTimeout(() => playSynthesizedTone(659.25, 'sine', 0.15, 0.05), 100);
       setTimeout(() => playSynthesizedTone(783.99, 'sine', 0.3, 0.06), 200);
@@ -1403,26 +1350,19 @@ export default function UltimateJetPesaCockpit() {
           setBalance(newBal);
         }
         const isAutoBetRunning = Boolean(state.isAutoBet);
-        const nextRoundsLeft = isAutoBetRunning ? Math.max(0, (state.autoRoundsLeft || 1) - 1) : 0;
-        const willContinueAuto = isAutoBetRunning && nextRoundsLeft > 0;
-
         const updateFn = (p) => ({
           ...p,
           hasBetCurrent: true,
           currentBetId: data.betId,
-          autoRoundsLeft: isAutoBetRunning ? nextRoundsLeft : p.autoRoundsLeft,
-          isAutoBet: isAutoBetRunning ? willContinueAuto : p.isAutoBet,
-          hasBetNext: willContinueAuto || p.isAuto,
+          isAutoBet: isAutoBetRunning,
+          hasBetNext: isAutoBetRunning || p.isAuto,
         });
 
         if (deckName === 'A') setDeckA(updateFn);
         else setDeckB(updateFn);
 
         if (!data.alreadyActive) {
-          triggerToast(`Deck ${deckName} stake KES ${state.wager} placed!${isAutoBetRunning ? ` (${nextRoundsLeft} rds remaining)` : ''}`, 'success');
-        }
-        if (isAutoBetRunning && nextRoundsLeft === 0) {
-          triggerToast(`Deck ${deckName}: Auto Bet completed all ${state.autoRoundsTotal} rounds.`, 'info');
+          triggerToast(`Deck ${deckName} stake KES ${state.wager} placed!${isAutoBetRunning ? ' (Auto)' : ''}`, 'success');
         }
         fetchMyBetsHistory();
       } else {
@@ -1533,20 +1473,6 @@ export default function UltimateJetPesaCockpit() {
       else setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
       fetchMyBetsHistory();
 
-      // Check Auto Bet win limits
-      if (targetState.isAutoBet) {
-        const winAmt = Number(data.winAmount || 0);
-        if (targetState.autoStopWin && winAmt >= targetState.autoStopWin) {
-          if (isA) setDeckA((p) => ({ ...p, isAutoBet: false, hasBetNext: false }));
-          else setDeckB((p) => ({ ...p, isAutoBet: false, hasBetNext: false }));
-          triggerToast(`Deck ${targetDeck}: Auto Bet stopped - single win KES ${winAmt.toFixed(2)} reached limit.`, 'info');
-        } else if (targetState.autoStopProfit && typeof newBal === 'number' && (newBal - targetState.autoStartBalance) >= targetState.autoStopProfit) {
-          if (isA) setDeckA((p) => ({ ...p, isAutoBet: false, hasBetNext: false }));
-          else setDeckB((p) => ({ ...p, isAutoBet: false, hasBetNext: false }));
-          triggerToast(`Deck ${targetDeck}: Auto Bet stopped - profit target reached (+KES ${(newBal - targetState.autoStartBalance).toFixed(2)})!`, 'success');
-        }
-      }
-
       playSynthesizedTone(587.33, 'sine', 0.12, 0.05);
       setTimeout(() => playSynthesizedTone(880.0, 'sine', 0.25, 0.05), 110);
       confetti({ particleCount: 60, spread: 50, origin: { y: 0.4 } });
@@ -1555,70 +1481,6 @@ export default function UltimateJetPesaCockpit() {
       if (isA) setDeckA((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
       else setDeckB((p) => ({ ...p, hasBetCurrent: false, currentBetId: null }));
       triggerToast(e.message, 'error');
-    }
-  };
-
-  const openAutoSettingsModal = (deckName) => {
-    const isA = deckName === 'A';
-    const targetDeck = isA ? deckA : deckB;
-    setAutoTempSettings({
-      rounds: targetDeck.autoRoundsTotal || 10,
-      enableStopLoss: targetDeck.autoStopLoss !== null,
-      stopLoss: targetDeck.autoStopLoss ? String(targetDeck.autoStopLoss) : '200',
-      enableStopWin: targetDeck.autoStopWin !== null,
-      stopWin: targetDeck.autoStopWin ? String(targetDeck.autoStopWin) : '500',
-      enableStopProfit: targetDeck.autoStopProfit !== null,
-      stopProfit: targetDeck.autoStopProfit ? String(targetDeck.autoStopProfit) : '1000',
-    });
-    setAutoSettingsModalDeck(deckName);
-  };
-
-  const handleResetAutoSettings = () => {
-    setAutoTempSettings({
-      rounds: 10,
-      enableStopLoss: false,
-      stopLoss: '200',
-      enableStopWin: false,
-      stopWin: '500',
-      enableStopProfit: false,
-      stopProfit: '1000',
-    });
-  };
-
-  const handleSaveAutoSettings = (startImmediately = false) => {
-    if (!autoSettingsModalDeck) return;
-    const isA = autoSettingsModalDeck === 'A';
-    const setter = isA ? setDeckA : setDeckB;
-    const currentDeck = isA ? deckA : deckB;
-    const roundsVal = Math.max(1, parseInt(autoTempSettings.rounds, 10) || 10);
-    const stopLossVal = autoTempSettings.enableStopLoss ? Math.max(1, parseFloat(autoTempSettings.stopLoss) || 0) : null;
-    const stopWinVal = autoTempSettings.enableStopWin ? Math.max(1, parseFloat(autoTempSettings.stopWin) || 0) : null;
-    const stopProfitVal = autoTempSettings.enableStopProfit ? Math.max(1, parseFloat(autoTempSettings.stopProfit) || 0) : null;
-
-    setter((p) => {
-      const willStart = startImmediately || p.isAutoBet;
-      if (startImmediately && balance < p.wager) {
-        triggerToast(`Insufficient balance to start Auto Bet (KES ${p.wager} required).`, 'error');
-        return p;
-      }
-      return {
-        ...p,
-        autoRoundsTotal: roundsVal,
-        autoRoundsLeft: roundsVal,
-        autoStopLoss: stopLossVal,
-        autoStopWin: stopWinVal,
-        autoStopProfit: stopProfitVal,
-        autoStartBalance: willStart ? balance : p.autoStartBalance,
-        isAutoBet: willStart,
-        hasBetNext: willStart ? true : p.hasBetNext,
-      };
-    });
-
-    setAutoSettingsModalDeck(null);
-    if (startImmediately) {
-      triggerToast(`Deck ${autoSettingsModalDeck}: Auto Bet activated for ${roundsVal} rounds!`, 'success');
-    } else {
-      triggerToast(`Deck ${autoSettingsModalDeck}: Auto settings saved (${roundsVal} rounds).`, 'info');
     }
   };
 
@@ -1639,15 +1501,12 @@ export default function UltimateJetPesaCockpit() {
         triggerToast(`Insufficient funds (KES ${balance.toFixed(2)}) for wager KES ${currentDeck.wager}. Please deposit.`, 'error');
         return;
       }
-      const rounds = currentDeck.autoRoundsTotal || 10;
       setter((p) => ({
         ...p,
         isAutoBet: true,
-        autoStartBalance: balance,
-        autoRoundsLeft: rounds,
         hasBetNext: true,
       }));
-      triggerToast(`Deck ${targetDeck}: Auto Bet activated for ${rounds} rounds!`, 'success');
+      triggerToast(`Deck ${targetDeck}: Auto Bet activated!`, 'success');
     }
   };
 
@@ -1869,83 +1728,158 @@ export default function UltimateJetPesaCockpit() {
     );
   };
 
-  const renderDeckPanel = (name, deck, setter, color) => (
-    <div key={name} className="jp-deck-panel">
-      <div className="jp-spribe-toggle">
-        <button onClick={() => setter((p) => ({ ...p, isAuto: false }))} className={`jp-spribe-tab ${!deck.isAuto ? 'jp-active' : ''}`}>Bet</button>
-        <button onClick={() => setter((p) => ({ ...p, isAuto: true }))} className={`jp-spribe-tab ${deck.isAuto ? 'jp-active' : ''}`}>Auto</button>
-      </div>
-      <div className="jp-wager-controls">
-        <button onClick={() => setter((p) => ({ ...p, wager: Math.max(MIN_WAGER, p.wager - MIN_WAGER) }))} className="jp-round-btn"><Icon name="minus" size={14} /></button>
-        <input type="number" min={MIN_WAGER} step={MIN_WAGER} value={deck.wager} onChange={(e) => setter((p) => ({ ...p, wager: Math.max(MIN_WAGER, parseInt(e.target.value, 10) || MIN_WAGER) }))} className="jp-wager-input" />
-        <button onClick={() => setter((p) => ({ ...p, wager: p.wager + MIN_WAGER }))} className="jp-round-btn"><Icon name="plus" size={14} /></button>
-      </div>
-      <div className="jp-quick-stake">
-        {[10, 50, 100, 500].map((v) => (
-          <button key={v} onClick={() => setter((p) => ({ ...p, wager: v }))} className="jp-quick-btn">{v}</button>
-        ))}
-      </div>
+  const renderDeckPanel = (name, deck, setter) => {
+    const isQueued = deck.hasBetNext;
+    const isFlying = deck.hasBetCurrent;
+    const formattedWager = `${Number(deck.wager || 0).toFixed(2)} KSH`;
 
-      {/* Auto Bet Row (BEFORE Auto Cash Out) */}
-      <div className="jp-auto-bet-row">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span className="jp-auto-bet-label">Auto Bet</span>
-          {deck.isAutoBet && (
-            <span className="jp-auto-bet-rounds-pill">
-              {deck.autoRoundsLeft}/{deck.autoRoundsTotal} Rds
-            </span>
-          )}
+    return (
+      <div key={name} className="jp-deck-panel">
+        {/* Top Centered Bet / Auto Pill */}
+        <div className="jp-deck-tab-wrap">
+          <div className="jp-deck-tabs">
+            <button
+              type="button"
+              onClick={() => setter((p) => ({ ...p, isAuto: false }))}
+              className={`jp-deck-tab-btn ${!deck.isAuto ? 'active' : ''}`}
+            >
+              Bet
+            </button>
+            <button
+              type="button"
+              onClick={() => setter((p) => ({ ...p, isAuto: true }))}
+              className={`jp-deck-tab-btn ${deck.isAuto ? 'active' : ''}`}
+            >
+              Auto
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <button
-            type="button"
-            onClick={() => openAutoSettingsModal(name)}
-            className="jp-auto-settings-cog-btn"
-            title="Auto Bet Settings"
-          >
-            <Icon name="settings" size={12} />
-            <span>Settings</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleToggleAutoBet(name)}
-            className="jp-switch-track"
-            style={{ background: deck.isAutoBet ? '#22c55e' : '#1f2937' }}
-            title={deck.isAutoBet ? 'Stop Auto Bet' : 'Start Auto Bet'}
-          >
-            <span
-              className="jp-switch-knob"
-              style={{ transform: deck.isAutoBet ? 'translateX(18px)' : 'translateX(0)' }}
-            />
-          </button>
-        </div>
-      </div>
 
-      <div className="jp-auto-cash-row">
-        <span className="jp-auto-cash-label">Auto Cash Out</span>
-        <button onClick={() => setter((p) => ({ ...p, isAutoCash: !p.isAutoCash }))} className="jp-switch-track" style={{ background: deck.isAutoCash ? '#22c55e' : '#1f2937' }}>
-          <span className="jp-switch-knob" style={{ transform: deck.isAutoCash ? 'translateX(18px)' : 'translateX(0)' }} />
-        </button>
+        {/* Two-Column Main Row: Left (Stepper + 2x2 Grid), Right (Big Amber BET Button) */}
+        <div className="jp-deck-main-row">
+          <div className="jp-deck-left-col">
+            {/* Stepper Input [-] WAGER [+] */}
+            <div className="jp-stepper-box">
+              <button
+                type="button"
+                onClick={() => setter((p) => ({ ...p, wager: Math.max(MIN_WAGER, p.wager - MIN_WAGER) }))}
+                className="jp-stepper-btn"
+                title="Decrease stake"
+              >
+                <Icon name="minus-circle" size={18} />
+              </button>
+              <input
+                type="number"
+                min={MIN_WAGER}
+                step={MIN_WAGER}
+                value={deck.wager}
+                onChange={(e) => setter((p) => ({ ...p, wager: Math.max(MIN_WAGER, parseInt(e.target.value, 10) || MIN_WAGER) }))}
+                className="jp-stepper-input"
+              />
+              <button
+                type="button"
+                onClick={() => setter((p) => ({ ...p, wager: p.wager + MIN_WAGER }))}
+                className="jp-stepper-btn"
+                title="Increase stake"
+              >
+                <Icon name="plus-circle" size={18} />
+              </button>
+            </div>
+
+            {/* 2x2 Quick Stake Grid: 50, 500, 1000, 10000 */}
+            <div className="jp-quick-grid-2x2">
+              {[50, 500, 1000, 10000].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setter((p) => ({ ...p, wager: v }))}
+                  className={`jp-quick-grid-btn ${deck.wager === v ? 'active' : ''}`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="jp-deck-right-col">
+            {isFlying ? (
+              <button
+                type="button"
+                onClick={() => handleManualPayoutExecution(name)}
+                className="jp-action-btn jp-cashout-mode"
+              >
+                <span className="jp-action-label">CASH OUT</span>
+                <span className="jp-action-sub">{(deck.wager * multiplier).toFixed(2)} KES</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => placeWagerIntent(name)}
+                className={`jp-action-btn jp-bet-mode ${isQueued ? 'queued' : ''} ${deck.isAutoBet ? 'auto-active' : ''}`}
+              >
+                {isQueued ? (
+                  <>
+                    <span className="jp-action-label">CANCEL</span>
+                    <span className="jp-action-sub">Queued</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="jp-action-label">BET</span>
+                    <span className="jp-action-sub">{formattedWager}</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Single-Line Bottom Row (Only visible when deck.isAuto is true) */}
+        {deck.isAuto && (
+          <div className="jp-deck-auto-row">
+            {/* Auto Bet Toggle */}
+            <div className="jp-auto-inline-group">
+              <span className="jp-auto-inline-label">Auto Bet</span>
+              <button
+                type="button"
+                onClick={() => handleToggleAutoBet(name)}
+                className={`jp-toggle-pill ${deck.isAutoBet ? 'active' : ''}`}
+                title={deck.isAutoBet ? 'Disable Auto Bet' : 'Enable Auto Bet'}
+              >
+                <span className="jp-toggle-knob" />
+              </button>
+            </div>
+
+            {/* Auto Cash Out Toggle */}
+            <div className="jp-auto-inline-group">
+              <span className="jp-auto-inline-label">Auto Cash Out</span>
+              <button
+                type="button"
+                onClick={() => setter((p) => ({ ...p, isAutoCash: !p.isAutoCash }))}
+                className={`jp-toggle-pill ${deck.isAutoCash ? 'active' : ''}`}
+                title={deck.isAutoCash ? 'Disable Auto Cash Out' : 'Enable Auto Cash Out'}
+              >
+                <span className="jp-toggle-knob" />
+              </button>
+            </div>
+
+            {/* Multiplier input pill: e.g. [ 2.55  x ] */}
+            <div className="jp-cashout-pill-box" style={{ opacity: deck.isAutoCash ? 1 : 0.45 }}>
+              <input
+                type="number"
+                step="0.05"
+                min="1.01"
+                disabled={!deck.isAutoCash}
+                value={deck.cashVal}
+                onChange={(e) => setter((p) => ({ ...p, cashVal: e.target.value }))}
+                className="jp-cashout-pill-input"
+              />
+              <span className="jp-cashout-pill-suffix">x</span>
+            </div>
+          </div>
+        )}
       </div>
-      <input type="number" step="0.1" disabled={!deck.isAutoCash} value={deck.cashVal} onChange={(e) => setter((p) => ({ ...p, cashVal: e.target.value }))} className="jp-auto-cash-input" style={{ opacity: deck.isAutoCash ? 1 : 0.4 }} />
-      {deck.hasBetCurrent ? (
-        <button onClick={() => handleManualPayoutExecution(name)} className="jp-cashout-button">
-          CASH OUT
-          <span className="jp-btn-sub">{(deck.wager * multiplier).toFixed(2)} KES</span>
-        </button>
-      ) : (
-        <button onClick={() => placeWagerIntent(name)} className={`jp-bet-button ${deck.hasBetNext ? 'queued' : ''} ${deck.isAutoBet ? 'auto-active' : ''}`} style={{ background: deck.hasBetNext ? '#475569' : deck.isAutoBet ? '#16a34a' : color }}>
-          {deck.hasBetNext ? (
-            <>CANCEL<span className="jp-btn-sub-sm">Queued</span></>
-          ) : deck.isAutoBet ? (
-            <>AUTO BET<span className="jp-btn-sub">{deck.wager} KES</span></>
-          ) : (
-            <>BET<span className="jp-btn-sub">{deck.wager} KES</span></>
-          )}
-        </button>
-      )}
-    </div>
-  );
+    );
+  };
 
   /* ---------------------------------------------------------------------- */
   /*  JSX                                                                    */
@@ -2059,8 +1993,8 @@ export default function UltimateJetPesaCockpit() {
 
           {/* Two Betting Decks (Deck A & Deck B) */}
           <div className="jp-deck-grid">
-            {renderDeckPanel('A', deckA, setDeckA, '#22c55e')}
-            {renderDeckPanel('B', deckB, setDeckB, '#16a34a')}
+            {renderDeckPanel('A', deckA, setDeckA)}
+            {renderDeckPanel('B', deckB, setDeckB)}
           </div>
 
           {/* LIVE Section Directly Below the GAME Two Decks Section */}
@@ -2299,160 +2233,7 @@ export default function UltimateJetPesaCockpit() {
         </div>
       )}
 
-      {/* Auto Play Settings Modal */}
-      {autoSettingsModalDeck && (
-        <div className="jp-modal-overlay" onClick={() => setAutoSettingsModalDeck(null)}>
-          <div className="jp-modal-box jp-auto-modal-box" onClick={(e) => e.stopPropagation()}>
-            <div className="jp-auto-modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Icon name="settings" size={18} />
-                <h3 className="jp-modal-title" style={{ margin: 0, color: '#f8fafc', fontSize: '15px' }}>
-                  Auto Bet Settings • Deck {autoSettingsModalDeck}
-                </h3>
-              </div>
-              <button className="jp-modal-close" onClick={() => setAutoSettingsModalDeck(null)}>
-                <Icon name="x" size={18} />
-              </button>
-            </div>
 
-            <div className="jp-auto-modal-content">
-              {/* Number of Rounds */}
-              <div className="jp-auto-setting-block">
-                <label className="jp-auto-setting-title">NUMBER OF ROUNDS</label>
-                <div className="jp-auto-rounds-grid">
-                  {[10, 20, 50, 100].map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setAutoTempSettings((p) => ({ ...p, rounds: r }))}
-                      className={`jp-auto-round-btn ${autoTempSettings.rounds === r ? 'active' : ''}`}
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Stop if cash decreases by (Stop Loss) */}
-              <div className="jp-auto-setting-card">
-                <div className="jp-auto-setting-header">
-                  <div>
-                    <div className="jp-auto-setting-name">Stop if cash decreases by</div>
-                    <div className="jp-auto-setting-sub">Stops auto bet if wallet loss exceeds this amount</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAutoTempSettings((p) => ({ ...p, enableStopLoss: !p.enableStopLoss }))}
-                    className="jp-switch-track"
-                    style={{ background: autoTempSettings.enableStopLoss ? '#22c55e' : '#1f2937' }}
-                  >
-                    <span className="jp-switch-knob" style={{ transform: autoTempSettings.enableStopLoss ? 'translateX(18px)' : 'translateX(0)' }} />
-                  </button>
-                </div>
-                {autoTempSettings.enableStopLoss && (
-                  <div className="jp-auto-input-wrap">
-                    <span className="jp-auto-input-curr">KES</span>
-                    <input
-                      type="number"
-                      min="10"
-                      value={autoTempSettings.stopLoss}
-                      onChange={(e) => setAutoTempSettings((p) => ({ ...p, stopLoss: e.target.value }))}
-                      placeholder="e.g. 500"
-                      className="jp-auto-setting-input"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Stop if single win exceeds */}
-              <div className="jp-auto-setting-card">
-                <div className="jp-auto-setting-header">
-                  <div>
-                    <div className="jp-auto-setting-name">Stop if single win exceeds</div>
-                    <div className="jp-auto-setting-sub">Stops auto bet if a single win is greater than this</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAutoTempSettings((p) => ({ ...p, enableStopWin: !p.enableStopWin }))}
-                    className="jp-switch-track"
-                    style={{ background: autoTempSettings.enableStopWin ? '#22c55e' : '#1f2937' }}
-                  >
-                    <span className="jp-switch-knob" style={{ transform: autoTempSettings.enableStopWin ? 'translateX(18px)' : 'translateX(0)' }} />
-                  </button>
-                </div>
-                {autoTempSettings.enableStopWin && (
-                  <div className="jp-auto-input-wrap">
-                    <span className="jp-auto-input-curr">KES</span>
-                    <input
-                      type="number"
-                      min="10"
-                      value={autoTempSettings.stopWin}
-                      onChange={(e) => setAutoTempSettings((p) => ({ ...p, stopWin: e.target.value }))}
-                      placeholder="e.g. 1000"
-                      className="jp-auto-setting-input"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Stop if cash increases by (Profit Target) */}
-              <div className="jp-auto-setting-card">
-                <div className="jp-auto-setting-header">
-                  <div>
-                    <div className="jp-auto-setting-name">Stop if cash increases by</div>
-                    <div className="jp-auto-setting-sub">Locks profit and stops auto bet if wallet gains this</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAutoTempSettings((p) => ({ ...p, enableStopProfit: !p.enableStopProfit }))}
-                    className="jp-switch-track"
-                    style={{ background: autoTempSettings.enableStopProfit ? '#22c55e' : '#1f2937' }}
-                  >
-                    <span className="jp-switch-knob" style={{ transform: autoTempSettings.enableStopProfit ? 'translateX(18px)' : 'translateX(0)' }} />
-                  </button>
-                </div>
-                {autoTempSettings.enableStopProfit && (
-                  <div className="jp-auto-input-wrap">
-                    <span className="jp-auto-input-curr">KES</span>
-                    <input
-                      type="number"
-                      min="10"
-                      value={autoTempSettings.stopProfit}
-                      onChange={(e) => setAutoTempSettings((p) => ({ ...p, stopProfit: e.target.value }))}
-                      placeholder="e.g. 2000"
-                      className="jp-auto-setting-input"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="jp-auto-modal-footer">
-              <button
-                type="button"
-                onClick={handleResetAutoSettings}
-                className="jp-auto-reset-btn"
-              >
-                Reset
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSaveAutoSettings(false)}
-                className="jp-auto-save-btn"
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSaveAutoSettings(true)}
-                className="jp-auto-start-btn"
-              >
-                Start Auto Bet
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <style dangerouslySetInnerHTML={{ __html: `
         /* === BASE === */
@@ -3040,245 +2821,288 @@ export default function UltimateJetPesaCockpit() {
         .jp-crashed-sub { color: #475569; font-size: 13px; font-weight: 800; }
 
         /* === DECK PANEL === */
-        .jp-deck-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: rgba(15,23,42,0.8); border: 1px solid rgba(255,255,255,0.08); padding: 10px; border-radius: 16px; flex-shrink: 0; }
-        .jp-deck-panel { background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.06); padding: 10px; border-radius: 12px; display: flex; flex-direction: column; gap: 8px; }
-        .jp-spribe-toggle { display: flex; background: #111827; border-radius: 999px; padding: 2px; }
-        .jp-spribe-tab { flex: 1; border: none; border-radius: 999px; padding: 6px; font-size: 10px; font-weight: 900; cursor: pointer; color: #64748b; background: transparent; }
-        .jp-spribe-tab.jp-active { background: #1e293b; color: #fff; }
-        .jp-wager-controls { display: grid; grid-template-columns: 28px 1fr 28px; gap: 4px; align-items: center; }
-        .jp-round-btn { height: 28px; border-radius: 50%; border: none; background: #1f2937; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .jp-wager-input { width: 100%; padding: 6px; background: #0f172a; border: 1px solid rgba(255,255,255,0.1); color: #fff; font-weight: 900; text-align: center; border-radius: 999px; font-size: 14px; box-sizing: border-box; }
-        .jp-wager-input:focus { outline: none; border-color: #22c55e; }
-        .jp-quick-stake { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
-        .jp-quick-btn { background: #1f2937; border: none; color: #cbd5e1; border-radius: 999px; padding: 4px 2px; font-size: 10px; font-weight: 900; cursor: pointer; }
+        /* === MOTIVATIONAL BETTING DECKS === */
+        .jp-deck-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          background: rgba(15, 23, 42, 0.7);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          padding: 10px;
+          border-radius: 16px;
+          flex-shrink: 0;
+        }
+        .jp-deck-panel {
+          background: #11141a;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          padding: 10px 12px;
+          border-radius: 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
 
-        /* === AUTO BET ROW (BEFORE AUTO CASH OUT) === */
-        .jp-auto-bet-row {
+        /* Top centered Bet / Auto capsule */
+        .jp-deck-tab-wrap {
+          display: flex;
+          justify-content: center;
+          width: 100%;
+        }
+        .jp-deck-tabs {
+          display: inline-flex;
+          background: #1a1e27;
+          border-radius: 999px;
+          padding: 3px;
+          border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .jp-deck-tab-btn {
+          border: none;
+          border-radius: 999px;
+          padding: 3px 20px;
+          font-size: 11px;
+          font-weight: 700;
+          cursor: pointer;
+          color: #8e9ba8;
+          background: transparent;
+          transition: all 0.15s ease;
+        }
+        .jp-deck-tab-btn.active {
+          background: #2b313d;
+          color: #ffffff;
+        }
+
+        /* Main Row: Left Column (wager + 2x2 grid) & Right Column (Amber BET button) */
+        .jp-deck-main-row {
+          display: grid;
+          grid-template-columns: 1fr 1.15fr;
+          gap: 10px;
+          align-items: stretch;
+        }
+        .jp-deck-left-col {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          justify-content: center;
+        }
+
+        /* Stepper [-] Wager [+] */
+        .jp-stepper-box {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 2px 0;
-        }
-        .jp-auto-bet-label {
-          color: #94a3b8;
-          font-size: 10px;
-          font-weight: 900;
-          letter-spacing: 0.02em;
-        }
-        .jp-auto-bet-rounds-pill {
-          font-size: 8.5px;
-          font-weight: 950;
-          background: rgba(34, 197, 94, 0.16);
-          color: #4ade80;
-          border: 1px solid rgba(34, 197, 94, 0.35);
-          border-radius: 999px;
-          padding: 1.5px 6px;
-          letter-spacing: 0.02em;
-        }
-        .jp-auto-settings-cog-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: #000000;
+          border: 1px solid #1f2430;
           border-radius: 999px;
           padding: 2px 8px;
-          color: #cbd5e1;
-          font-size: 9.5px;
-          font-weight: 850;
+          height: 36px;
+          box-sizing: border-box;
+        }
+        .jp-stepper-btn {
+          background: transparent;
+          border: none;
+          color: #717d91;
           cursor: pointer;
-          transition: all 0.15s ease;
-        }
-        .jp-auto-settings-cog-btn:hover {
-          background: rgba(255, 255, 255, 0.15);
-          color: #ffffff;
-          border-color: rgba(255, 255, 255, 0.28);
-        }
-
-        .jp-auto-cash-row { display: flex; align-items: center; justify-content: space-between; }
-        .jp-auto-cash-label { color: #94a3b8; font-size: 10px; font-weight: 900; }
-        .jp-switch-track { width: 36px; height: 20px; border-radius: 999px; border: none; padding: 1px; cursor: pointer; }
-        .jp-switch-knob { display: block; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
-        .jp-auto-cash-input { width: 100%; padding: 6px; background: #0f172a; border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 900; text-align: center; box-sizing: border-box; }
-        .jp-bet-button, .jp-cashout-button {
-          width: 100%; padding: 10px; border: none; color: #fff; font-weight: 950; font-size: 13px;
-          border-radius: 10px; cursor: pointer; display: flex; flex-direction: column;
-          align-items: center; justify-content: center; line-height: 1.2;
-        }
-        .jp-bet-button { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-        .jp-cashout-button { background: linear-gradient(135deg, #f59e0b, #b45309); box-shadow: 0 4px 12px rgba(245,158,11,0.3); }
-        .jp-btn-sub { font-size: 14px; margin-top: 1px; }
-        .jp-btn-sub-sm { font-size: 11px; margin-top: 1px; }
-
-        /* === AUTO BET MODAL === */
-        .jp-auto-modal-box {
-          background: #0b1320;
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 16px;
-          width: 92%;
-          max-width: 440px;
-          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.85);
-          overflow: hidden;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           padding: 0;
+          transition: color 0.15s;
         }
-        .jp-auto-modal-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px 18px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(15, 23, 42, 0.95);
-        }
-        .jp-auto-modal-content {
-          padding: 16px 18px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          max-height: 70vh;
-          overflow-y: auto;
-        }
-        .jp-auto-setting-block {
-          display: flex;
-          flex-direction: column;
-          gap: 7px;
-        }
-        .jp-auto-setting-title {
-          font-size: 10px;
-          font-weight: 900;
-          color: #94a3b8;
-          letter-spacing: 0.05em;
-          text-transform: uppercase;
-        }
-        .jp-auto-rounds-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 8px;
-        }
-        .jp-auto-round-btn {
-          background: #1e293b;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 8px;
-          padding: 8px;
+        .jp-stepper-btn:hover {
           color: #cbd5e1;
-          font-size: 13px;
+        }
+        .jp-stepper-input {
+          width: 100%;
+          background: transparent;
+          border: none;
+          color: #ffffff;
           font-weight: 900;
-          cursor: pointer;
-          transition: all 0.15s ease;
           text-align: center;
+          font-size: 15px;
+          font-family: inherit;
+          outline: none;
+          -moz-appearance: textfield;
         }
-        .jp-auto-round-btn:hover {
-          background: #334155;
-          color: #fff;
+        .jp-stepper-input::-webkit-outer-spin-button,
+        .jp-stepper-input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
         }
-        .jp-auto-round-btn.active {
-          background: rgba(34, 197, 94, 0.18);
-          border-color: #22c55e;
-          color: #4ade80;
-          box-shadow: 0 0 10px rgba(34, 197, 94, 0.25);
+
+        /* 2x2 Quick Stake Grid: 50, 500, 1000, 10000 */
+        .jp-quick-grid-2x2 {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 5px;
         }
-        .jp-auto-setting-card {
-          background: rgba(0, 0, 0, 0.28);
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          border-radius: 10px;
-          padding: 10px 12px;
+        .jp-quick-grid-btn {
+          background: #141821;
+          border: 1px solid #202634;
+          border-radius: 999px;
+          padding: 4px 0;
+          font-size: 11px;
+          font-weight: 800;
+          color: #8e9ba8;
+          cursor: pointer;
+          text-align: center;
+          transition: all 0.15s ease;
+        }
+        .jp-quick-grid-btn:hover {
+          background: #1f2533;
+          color: #ffffff;
+        }
+        .jp-quick-grid-btn.active {
+          border-color: #3b82f6;
+          color: #60a5fa;
+        }
+
+        /* Right Column: Big prominent amber BET button */
+        .jp-deck-right-col {
+          display: flex;
+          width: 100%;
+          height: 100%;
+        }
+        .jp-action-btn {
+          width: 100%;
+          height: 100%;
+          min-height: 72px;
+          border: none;
+          border-radius: 14px;
+          cursor: pointer;
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          align-items: center;
+          justify-content: center;
+          gap: 2px;
+          transition: filter 0.15s, transform 0.05s;
+          box-sizing: border-box;
         }
-        .jp-auto-setting-header {
+        .jp-action-btn.jp-bet-mode {
+          background: #e59344;
+          color: #160f06;
+          box-shadow: 0 4px 14px rgba(229, 147, 68, 0.35);
+        }
+        .jp-action-btn.jp-bet-mode:hover {
+          filter: brightness(1.06);
+        }
+        .jp-action-btn.jp-bet-mode:active {
+          transform: scale(0.98);
+        }
+        .jp-action-btn.jp-bet-mode.queued {
+          background: #475569 !important;
+          color: #ffffff !important;
+          box-shadow: none !important;
+        }
+        .jp-action-btn.jp-bet-mode.auto-active {
+          background: #e59344;
+          color: #160f06;
+        }
+        .jp-action-btn.jp-cashout-mode {
+          background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+          color: #ffffff !important;
+          box-shadow: 0 4px 16px rgba(245, 158, 11, 0.45) !important;
+        }
+        .jp-action-label {
+          font-size: 18px;
+          font-weight: 900;
+          letter-spacing: 0.03em;
+          line-height: 1.1;
+        }
+        .jp-action-sub {
+          font-size: 13px;
+          font-weight: 800;
+          line-height: 1.1;
+        }
+
+        /* Single-Line Bottom Row in Auto Mode */
+        .jp-deck-auto-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 8px;
+          padding-top: 4px;
+          border-top: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .jp-auto-setting-name {
-          font-size: 11px;
-          font-weight: 850;
-          color: #f1f5f9;
-        }
-        .jp-auto-setting-sub {
-          font-size: 9.5px;
-          color: #64748b;
-          font-weight: 600;
-          margin-top: 1px;
-        }
-        .jp-auto-input-wrap {
+        .jp-auto-inline-group {
           display: flex;
           align-items: center;
-          background: #020617;
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 8px;
-          padding: 0 10px;
-          gap: 8px;
+          gap: 6px;
         }
-        .jp-auto-input-curr {
-          font-size: 10.5px;
-          font-weight: 900;
-          color: #22c55e;
+        .jp-auto-inline-label {
+          font-size: 10px;
+          font-weight: 700;
+          color: #8e9ba8;
+          white-space: nowrap;
         }
-        .jp-auto-setting-input {
-          flex: 1;
+        .jp-toggle-pill {
+          width: 34px;
+          height: 19px;
+          border-radius: 999px;
+          background: #282f3c;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          padding: 2px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          position: relative;
+          transition: background 0.2s ease;
+          box-sizing: border-box;
+        }
+        .jp-toggle-pill.active {
+          background: #22c55e;
+          border-color: #22c55e;
+        }
+        .jp-toggle-knob {
+          display: block;
+          width: 13px;
+          height: 13px;
+          border-radius: 50%;
+          background: #ffffff;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+          transition: transform 0.2s ease;
+          transform: translateX(0);
+        }
+        .jp-toggle-pill.active .jp-toggle-knob {
+          transform: translateX(15px);
+        }
+
+        /* Multiplier Input Pill: [ 2.55 x ] */
+        .jp-cashout-pill-box {
+          display: flex;
+          align-items: center;
+          background: #000000;
+          border: 1px solid #1f2430;
+          border-radius: 999px;
+          padding: 2px 8px;
+          width: 66px;
+          height: 25px;
+          box-sizing: border-box;
+          justify-content: center;
+          gap: 3px;
+          transition: opacity 0.15s ease;
+        }
+        .jp-cashout-pill-input {
+          width: 100%;
           background: transparent;
           border: none;
-          padding: 7px 0;
-          color: #f8fafc;
-          font-size: 12px;
+          color: #ffffff;
           font-weight: 800;
+          font-size: 11px;
+          text-align: right;
           outline: none;
+          font-family: inherit;
+          padding: 0;
+          -moz-appearance: textfield;
         }
-        .jp-auto-modal-footer {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 8px;
-          padding: 12px 18px;
-          border-top: 1px solid rgba(255, 255, 255, 0.08);
-          background: rgba(15, 23, 42, 0.95);
+        .jp-cashout-pill-input::-webkit-outer-spin-button,
+        .jp-cashout-pill-input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
         }
-        .jp-auto-reset-btn {
-          background: transparent;
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          color: #94a3b8;
-          border-radius: 8px;
-          padding: 7px 12px;
+        .jp-cashout-pill-suffix {
+          color: #8e9ba8;
           font-size: 11px;
-          font-weight: 800;
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-        .jp-auto-reset-btn:hover {
-          background: rgba(255, 255, 255, 0.05);
-          color: #cbd5e1;
-        }
-        .jp-auto-save-btn {
-          background: #334155;
-          border: none;
-          color: #fff;
-          border-radius: 8px;
-          padding: 7px 14px;
-          font-size: 11px;
-          font-weight: 800;
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-        .jp-auto-save-btn:hover {
-          background: #475569;
-        }
-        .jp-auto-start-btn {
-          background: linear-gradient(135deg, #22c55e, #16a34a);
-          border: none;
-          color: #fff;
-          border-radius: 8px;
-          padding: 7px 16px;
-          font-size: 11px;
-          font-weight: 900;
-          cursor: pointer;
-          box-shadow: 0 2px 8px rgba(34, 197, 94, 0.35);
-          transition: all 0.15s ease;
-        }
-        .jp-auto-start-btn:hover {
-          filter: brightness(1.1);
-          box-shadow: 0 4px 12px rgba(34, 197, 94, 0.5);
+          font-weight: 700;
         }
 
         /* === CHAT === */
@@ -3378,8 +3202,8 @@ export default function UltimateJetPesaCockpit() {
           .jp-canvas-container { height: 225px !important; min-height: 215px !important; flex: 0 0 auto !important; }
           .jp-deck-grid { max-height: none !important; padding: 6px !important; gap: 6px !important; flex-shrink: 0 !important; }
           .jp-live-below-decks { min-height: 340px !important; max-height: 480px !important; flex-shrink: 0 !important; }
-          .jp-deck-panel { padding: 6px !important; gap: 6px !important; }
-          .jp-bet-button, .jp-cashout-button { padding: 8px 4px !important; min-height: 52px !important; font-size: 12px !important; }
+          .jp-deck-panel { padding: 8px !important; gap: 6px !important; }
+          .jp-action-btn, .jp-bet-button, .jp-cashout-button { padding: 6px 4px !important; min-height: 54px !important; }
           .jp-header { flex-wrap: wrap; padding: 8px 10px !important; }
           .jp-brand-text { font-size: 18px !important; }
         }
@@ -3387,8 +3211,13 @@ export default function UltimateJetPesaCockpit() {
         /* === RESPONSIVE: MOBILE === */
         @media (max-width: 560px) {
           .jp-canvas-container { min-height: 190px !important; border-radius: 12px !important; }
-          .jp-deck-grid { gap: 4px !important; border-radius: 12px !important; max-height: 220px !important; }
-          .jp-wager-input { font-size: 12px !important; padding: 5px !important; }
+          .jp-deck-grid { gap: 6px !important; border-radius: 12px !important; max-height: none !important; }
+          .jp-stepper-box { height: 32px !important; padding: 2px 6px !important; }
+          .jp-stepper-input { font-size: 13px !important; }
+          .jp-quick-grid-btn { font-size: 10px !important; padding: 3px 0 !important; }
+          .jp-action-label { font-size: 15px !important; }
+          .jp-action-sub { font-size: 11px !important; }
+          .jp-action-btn { min-height: 60px !important; }
           .jp-multiplier-text { font-size: 2.8rem !important; }
           .jp-crashed-title { font-size: 1.8rem !important; }
           .jp-idle-text { font-size: 11px !important; }
@@ -3406,17 +3235,16 @@ export default function UltimateJetPesaCockpit() {
           .jp-brand-text { font-size: 16px !important; }
           .jp-multiplier-text { font-size: 2.2rem !important; }
           .jp-crashed-title { font-size: 1.5rem !important; }
-          .jp-deck-grid { max-height: 200px !important; }
+          .jp-deck-grid { max-height: none !important; }
         }
 
         /* === RESPONSIVE: LANDSCAPE MOBILE === */
         @media (max-height: 500px) and (orientation: landscape) {
           .jp-layout { padding-bottom: 48px !important; }
           .jp-canvas-container { min-height: 120px !important; }
-          .jp-deck-grid { max-height: 110px !important; gap: 4px !important; padding: 4px !important; }
+          .jp-deck-grid { max-height: none !important; gap: 4px !important; padding: 4px !important; }
           .jp-deck-panel { gap: 4px !important; padding: 4px !important; }
-          .jp-auto-cash-row, .jp-auto-cash-input { display: none !important; }
-          .jp-bet-button, .jp-cashout-button { min-height: 40px !important; padding: 6px !important; }
+          .jp-action-btn, .jp-bet-button, .jp-cashout-button { min-height: 44px !important; padding: 4px !important; }
           .jp-history-tape { padding: 4px 10px !important; }
           .jp-idle-text { font-size: 10px !important; margin-top: 6px !important; }
         }
