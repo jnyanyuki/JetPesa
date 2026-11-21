@@ -1730,235 +1730,6 @@ export default function UltimateJetPesaCockpit() {
     );
   };
 
-  const renderProfileTab = () => {
-    const totalStake = myBetsHistory.reduce((acc, b) => acc + (Number(b.stake) || 0), 0);
-    const totalWon = myBetsHistory.reduce((acc, b) => acc + (Number(b.winAmount) || 0), 0);
-    const netProfit = totalWon - totalStake;
-    const bestMultiplier = myBetsHistory.reduce((max, b) => Math.max(max, Number(b.multiplier) || 0), 0);
-    const wonCount = myBetsHistory.filter((b) => b.status === 'WON').length;
-    const winRate = myBetsHistory.length > 0 ? Math.round((wonCount / myBetsHistory.length) * 100) : 0;
-
-    return (
-      <div className="jp-panel-scroll jp-profile-scroll">
-        {/* Card 1: Kenyan Pilot Identity & BCLB Status */}
-        <div className="jp-profile-card">
-          <div className="jp-profile-header-row">
-            <div className="jp-profile-avatar-wrap">
-              <UserAvatar seed={user?.id || 'pilot'} size={48} />
-              <span className="jp-profile-online-badge" />
-            </div>
-            <div className="jp-profile-id-info">
-              <div className="jp-profile-name-row">
-                <span className="jp-profile-main-name">{editName || phoneProfile || 'Kenyan Pilot'}</span>
-                <span className="jp-bclb-badge">🇰🇪 BCLB 18+</span>
-              </div>
-              <div className="jp-profile-tags-row">
-                <span className="jp-kyc-tag"><Icon name="shield-check" size={11} /> KYC Tier 1 Verified</span>
-                <span className="jp-currency-tag">• KES Market</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 8-Digit Account ID Bar */}
-          <div className="jp-profile-account-id-box">
-            <div className="jp-account-id-label-col">
-              <span className="jp-account-id-sub">8-DIGIT PILOT ACCOUNT ID</span>
-              <span className="jp-account-id-code">{userIdCode || '32637692'}</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleCopyUserId}
-              className={`jp-account-id-copy-btn ${copiedUserId ? 'copied' : ''}`}
-            >
-              <Icon name={copiedUserId ? 'check' : 'copy'} size={14} />
-              <span>{copiedUserId ? 'COPIED' : 'COPY ID'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Card 2: Wallet & M-Pesa Banking */}
-        <div className="jp-profile-card">
-          <div className="jp-card-section-title">
-            <Icon name="wallet" size={14} />
-            <span>M-PESA WALLET & FUNDS</span>
-          </div>
-
-          <div className="jp-wallet-balance-grid">
-            <div className="jp-wallet-balance-cell">
-              <span className="jp-balance-cell-label">WITHDRAWABLE CASH</span>
-              <span className="jp-balance-cell-val jp-green-text">KES {balance.toFixed(2)}</span>
-            </div>
-            <div className="jp-wallet-balance-cell">
-              <span className="jp-balance-cell-label">BONUS BALANCE</span>
-              <span className="jp-balance-cell-val">KES 0.00</span>
-            </div>
-            <div className="jp-wallet-balance-cell">
-              <span className="jp-balance-cell-label">TOTAL FUNDS</span>
-              <span className="jp-balance-cell-val">KES {balance.toFixed(2)}</span>
-            </div>
-          </div>
-
-          <div className="jp-profile-wallet-actions">
-            <button
-              type="button"
-              onClick={() => setIsDepositModalOpen(true)}
-              className="jp-profile-action-btn jp-btn-deposit-mpesa"
-            >
-              <Icon name="plus" size={14} />
-              <span>DEPOSIT VIA M-PESA</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => balance > 0 ? setIsWithdrawModalOpen(true) : triggerToast('Wallet is empty. Deposit first.', 'info')}
-              className="jp-profile-action-btn jp-btn-withdraw-mpesa"
-            >
-              <Icon name="wallet" size={14} />
-              <span>WITHDRAW (B2C)</span>
-            </button>
-          </div>
-
-          {/* Linked M-Pesa Phone */}
-          <div className="jp-input-group-vertical" style={{ marginTop: '10px' }}>
-            <label className="jp-profile-input-label">
-              <span>PRIMARY M-PESA NUMBER</span>
-              <span className="jp-mpesa-active-pill">🟢 STK Active</span>
-            </label>
-            <div className="jp-phone-input-wrap">
-              <span className="jp-phone-prefix">+254</span>
-              <input
-                type="text"
-                value={editPhone}
-                onChange={(e) => setEditPhone(e.target.value)}
-                placeholder="07XXXXXXXX or 01XXXXXXXX"
-                className="jp-profile-text-input"
-              />
-            </div>
-            <span className="jp-input-helper-text">
-              Direct M-Pesa STK push and automated B2C payout disbursements are linked to this phone.
-            </span>
-          </div>
-        </div>
-
-        {/* Card 3: Betting History & Career Performance */}
-        <div className="jp-profile-card">
-          <div className="jp-card-section-title">
-            <Icon name="bar-chart-3" size={14} />
-            <span>KENYAN MARKET ACTIVITY STATS</span>
-          </div>
-
-          <div className="jp-stats-4grid">
-            <div className="jp-stat-tile">
-              <span className="jp-stat-tile-label">RECORDED WAGERS</span>
-              <span className="jp-stat-tile-val">{myBetsHistory.length}</span>
-            </div>
-            <div className="jp-stat-tile">
-              <span className="jp-stat-tile-label">TOTAL STAKED</span>
-              <span className="jp-stat-tile-val">KES {totalStake.toLocaleString()}</span>
-            </div>
-            <div className="jp-stat-tile">
-              <span className="jp-stat-tile-label">TOTAL WON</span>
-              <span className="jp-stat-tile-val jp-green-text">KES {totalWon.toLocaleString()}</span>
-            </div>
-            <div className="jp-stat-tile">
-              <span className="jp-stat-tile-label">NET PROFIT</span>
-              <span className={`jp-stat-tile-val ${netProfit >= 0 ? 'jp-green-text' : 'jp-rose-text'}`}>
-                {netProfit >= 0 ? '+' : ''}KES {netProfit.toLocaleString()}
-              </span>
-            </div>
-          </div>
-
-          <div className="jp-stat-secondary-row">
-            <div className="jp-stat-mini-pill">
-              <span>BEST MULTIPLIER:</span>
-              <strong style={{ color: bestMultiplier >= 10 ? '#fbbf24' : '#c084fc' }}>
-                {bestMultiplier > 0 ? `${bestMultiplier.toFixed(2)}x` : '—'}
-              </strong>
-            </div>
-            <div className="jp-stat-mini-pill">
-              <span>WIN RATE:</span>
-              <strong style={{ color: winRate >= 50 ? '#22c55e' : '#94a3b8' }}>{winRate}%</strong>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: Account Details & Editing */}
-        <div className="jp-profile-card">
-          <div className="jp-card-section-title">
-            <Icon name="settings" size={14} />
-            <span>ACCOUNT & NICKNAME</span>
-          </div>
-
-          <div className="jp-input-group-vertical">
-            <label className="jp-profile-input-label">DISPLAY NAME / PILOT NICKNAME</label>
-            <input
-              type="text"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              placeholder="Your nickname"
-              className="jp-profile-text-input"
-            />
-          </div>
-
-          <div className="jp-input-group-vertical" style={{ marginTop: '8px' }}>
-            <label className="jp-profile-input-label">REGISTERED SYSTEM EMAIL</label>
-            <input
-              type="text"
-              value={user?.email || `${editPhone || 'pilot'}@phone.jetpesa.com`}
-              disabled
-              readOnly
-              className="jp-profile-text-input jp-input-disabled"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={handleProfileUpdate}
-            className="jp-save-profile-btn"
-          >
-            <Icon name="check" size={14} />
-            <span>SAVE PROFILE CHANGES</span>
-          </button>
-        </div>
-
-        {/* Card 5: BCLB Regulatory Notice & Responsible Gaming */}
-        <div className="jp-profile-card jp-bclb-card">
-          <div className="jp-bclb-header">
-            <Icon name="shield-check" size={16} />
-            <span>BETTING CONTROL & LICENSING BOARD (BCLB)</span>
-          </div>
-          <p className="jp-bclb-text">
-            JetPesa operates in full compliance with the Betting, Lotteries and Gaming Act (Cap 131, Laws of Kenya).
-            Strictly 18+ only. Gambling can be addictive and financially hazardous. Play responsibly and set personal wager limits.
-          </p>
-          <div className="jp-bclb-controls">
-            <div className="jp-limit-chip">
-              <span className="jp-limit-label">DAILY STAKE LIMIT:</span>
-              <span className="jp-limit-val">KES 50,000 / Day</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsProvablyModalOpen(true)}
-              className="jp-provably-verify-btn"
-            >
-              <span>AUDIT PROVABLY FAIR SEED</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Card 6: Session & Sign Out */}
-        <div className="jp-profile-card" style={{ textAlign: 'center' }}>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="jp-signout-btn"
-          >
-            <span>SIGN OUT OF JETPESA</span>
-          </button>
-        </div>
-      </div>
-    );
-  };
-
   const renderDeckPanel = (name, deck, setter) => {
     const isQueued = deck.hasBetNext;
     const isFlying = deck.hasBetCurrent;
@@ -2134,6 +1905,13 @@ export default function UltimateJetPesaCockpit() {
   /* ---------------------------------------------------------------------- */
   /*  JSX                                                                    */
   /* ---------------------------------------------------------------------- */
+  const profileTotalStake = myBetsHistory.reduce((acc, b) => acc + (Number(b.stake) || 0), 0);
+  const profileTotalWon = myBetsHistory.reduce((acc, b) => acc + (Number(b.winAmount) || 0), 0);
+  const profileNetProfit = profileTotalWon - profileTotalStake;
+  const profileBestMultiplier = myBetsHistory.reduce((max, b) => Math.max(max, Number(b.multiplier) || 0), 0);
+  const profileWonCount = myBetsHistory.filter((b) => b.status === 'WON').length;
+  const profileWinRate = myBetsHistory.length > 0 ? Math.round((profileWonCount / myBetsHistory.length) * 100) : 0;
+
   return (
     <div className="jp-cockpit">
       {/* Toasts */}
@@ -2168,12 +1946,12 @@ export default function UltimateJetPesaCockpit() {
             <span className="jp-rain-label">RAIN</span>
           </button>
           <button
-            className={`jp-profile-btn ${activeTab === 'profile' ? 'active' : ''}`}
+            className="jp-profile-btn"
             onClick={() => {
-              setActiveTab('profile');
-              liveSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              fetchMyBetsHistory();
+              setIsProfileModalOpen(true);
             }}
-            title={userIdCode ? `User ID: ${userIdCode}` : 'Profile'}
+            title={userIdCode ? `Pilot Account ID: ${userIdCode} - Click to open Profile` : 'Profile'}
           >
             <Icon name="user" size={13} />
             <span className="jp-profile-label">{userIdCode ? `ID: ${userIdCode}` : 'PROFILE'}</span>
@@ -2264,10 +2042,6 @@ export default function UltimateJetPesaCockpit() {
               <button onClick={() => { setActiveTab('mine'); fetchMyBetsHistory(); }} className={`jp-tab ${activeTab === 'mine' ? 'jp-active' : ''}`}>
                 MY BETS{myBetsHistory.length > 0 ? ` (${myBetsHistory.length})` : ''}
               </button>
-              <button onClick={() => setActiveTab('profile')} className={`jp-tab ${activeTab === 'profile' ? 'jp-active' : ''}`}>
-                <Icon name="user" size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
-                PROFILE
-              </button>
             </div>
             {activeTab === 'all' && (
               <div className="jp-live-summary-bar">
@@ -2302,7 +2076,7 @@ export default function UltimateJetPesaCockpit() {
                 </div>
               </div>
             )}
-            {activeTab === 'all' ? renderLiveBets() : activeTab === 'mine' ? renderMyBets() : renderProfileTab()}
+            {activeTab === 'all' ? renderLiveBets() : renderMyBets()}
           </div>
         </div>
 
@@ -2361,18 +2135,6 @@ export default function UltimateJetPesaCockpit() {
         <button onClick={() => setMobileActivePanel('chat')} className={`jp-mobile-tab ${mobileActivePanel === 'chat' ? 'jp-active' : ''}`}>
           <Icon name="message-square" size={18} />CHAT
         </button>
-        <button
-          onClick={() => {
-            setMobileActivePanel('bets');
-            setActiveTab('profile');
-            setTimeout(() => {
-              liveSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 40);
-          }}
-          className={`jp-mobile-tab ${mobileActivePanel === 'bets' && activeTab === 'profile' ? 'jp-active' : ''}`}
-        >
-          <Icon name="user" size={18} />PROFILE
-        </button>
       </div>
 
       {/* Deposit Modal */}
@@ -2397,73 +2159,249 @@ export default function UltimateJetPesaCockpit() {
       {/* Profile Modal */}
       {isProfileModalOpen && (
         <div className="jp-modal-overlay" onClick={() => setIsProfileModalOpen(false)}>
-          <div className="jp-modal-box jp-modal-blue" onClick={(e) => e.stopPropagation()}>
-            <button className="jp-modal-close" onClick={() => setIsProfileModalOpen(false)}><Icon name="x" size={20} /></button>
-            <h3 className="jp-modal-title" style={{ color: '#38bdf8' }}>Profile Settings</h3>
+          <div className="jp-modal-box jp-modal-profile" onClick={(e) => e.stopPropagation()}>
+            <button className="jp-modal-close" onClick={() => setIsProfileModalOpen(false)}>
+              <Icon name="x" size={20} />
+            </button>
 
-            {/* 8-Digit User ID Field */}
-            <div className="jp-modal-field">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <label className="jp-modal-label" style={{ margin: 0 }}>USER ID</label>
-                <span style={{ fontSize: '10px', color: '#38bdf8', fontWeight: 800, background: 'rgba(56, 189, 248, 0.12)', padding: '2px 8px', borderRadius: '4px', letterSpacing: '0.05em' }}>
-                  8-DIGIT ACCOUNT ID
-                </span>
+            <div className="jp-profile-modal-top">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon name="user" size={18} color="#38bdf8" />
+                <h3 className="jp-modal-title" style={{ color: '#38bdf8', margin: 0 }}>
+                  PILOT PROFILE & ACCOUNT
+                </h3>
               </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  value={userIdCode || '—'}
-                  disabled
-                  readOnly
-                  className="jp-modal-input jp-disabled"
-                  style={{
-                    flex: 1,
-                    letterSpacing: '0.22em',
-                    fontWeight: 900,
-                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                    color: '#38bdf8',
-                    fontSize: '16px',
-                    background: 'rgba(56, 189, 248, 0.08)',
-                    border: '1px solid rgba(56, 189, 248, 0.3)',
-                    cursor: 'text',
-                  }}
-                />
+              <span className="jp-bclb-badge">🇰🇪 BCLB LICENSED</span>
+            </div>
+
+            {/* Card 1: Kenyan Pilot Identity & BCLB Status */}
+            <div className="jp-profile-card">
+              <div className="jp-profile-header-row">
+                <div className="jp-profile-avatar-wrap">
+                  <UserAvatar seed={user?.id || 'pilot'} size={48} />
+                  <span className="jp-profile-online-badge" />
+                </div>
+                <div className="jp-profile-id-info">
+                  <div className="jp-profile-name-row">
+                    <span className="jp-profile-main-name">{editName || phoneProfile || 'Kenyan Pilot'}</span>
+                    <span className="jp-bclb-badge">🇰🇪 BCLB 18+</span>
+                  </div>
+                  <div className="jp-profile-tags-row">
+                    <span className="jp-kyc-tag"><Icon name="shield-check" size={11} /> KYC Tier 1 Verified</span>
+                    <span className="jp-currency-tag">• KES Market</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 8-Digit Account ID Bar */}
+              <div className="jp-profile-account-id-box">
+                <div className="jp-account-id-label-col">
+                  <span className="jp-account-id-sub">8-DIGIT PILOT ACCOUNT ID</span>
+                  <span className="jp-account-id-code">{userIdCode || '32637692'}</span>
+                </div>
                 <button
                   type="button"
                   onClick={handleCopyUserId}
-                  className="jp-modal-btn"
-                  title="Copy 8-digit User ID"
-                  style={{
-                    width: 'auto',
-                    minWidth: '82px',
-                    background: copiedUserId ? 'rgba(34, 197, 94, 0.2)' : 'rgba(56, 189, 248, 0.15)',
-                    border: `1px solid ${copiedUserId ? '#22c55e' : 'rgba(56, 189, 248, 0.35)'}`,
-                    color: copiedUserId ? '#22c55e' : '#38bdf8',
-                    borderRadius: '8px',
-                    padding: '0 12px',
-                    height: '42px',
-                    cursor: 'pointer',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '5px',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.15s ease',
-                  }}
+                  className={`jp-account-id-copy-btn ${copiedUserId ? 'copied' : ''}`}
                 >
                   <Icon name={copiedUserId ? 'check' : 'copy'} size={14} />
-                  <span>{copiedUserId ? 'COPIED' : 'COPY'}</span>
+                  <span>{copiedUserId ? 'COPIED' : 'COPY ID'}</span>
                 </button>
               </div>
             </div>
 
-            <div className="jp-modal-field"><label className="jp-modal-label">DISPLAY NAME</label><input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Your name" className="jp-modal-input" /></div>
-            <div className="jp-modal-field"><label className="jp-modal-label">EMAIL</label><input type="text" value={user?.email || ''} disabled className="jp-modal-input jp-disabled" /></div>
-            <div className="jp-modal-field"><label className="jp-modal-label">M-PESA PHONE</label><input type="text" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="07XXXXXXXX" className="jp-modal-input" /></div>
-            <button onClick={handleProfileUpdate} className="jp-modal-btn jp-btn-blue">SAVE PROFILE</button>
-            <button onClick={handleSignOut} className="jp-modal-btn" style={{ marginTop: '10px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}>SIGN OUT</button>
+            {/* Card 2: Wallet & M-Pesa Banking */}
+            <div className="jp-profile-card">
+              <div className="jp-card-section-title">
+                <Icon name="wallet" size={14} />
+                <span>M-PESA WALLET & FUNDS</span>
+              </div>
+
+              <div className="jp-wallet-balance-grid">
+                <div className="jp-wallet-balance-cell">
+                  <span className="jp-balance-cell-label">WITHDRAWABLE CASH</span>
+                  <span className="jp-balance-cell-val jp-green-text">KES {balance.toFixed(2)}</span>
+                </div>
+                <div className="jp-wallet-balance-cell">
+                  <span className="jp-balance-cell-label">BONUS BALANCE</span>
+                  <span className="jp-balance-cell-val">KES 0.00</span>
+                </div>
+                <div className="jp-wallet-balance-cell">
+                  <span className="jp-balance-cell-label">TOTAL FUNDS</span>
+                  <span className="jp-balance-cell-val">KES {balance.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="jp-profile-wallet-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileModalOpen(false);
+                    setIsDepositModalOpen(true);
+                  }}
+                  className="jp-profile-action-btn jp-btn-deposit-mpesa"
+                >
+                  <Icon name="plus" size={14} />
+                  <span>DEPOSIT VIA M-PESA</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (balance > 0) {
+                      setIsProfileModalOpen(false);
+                      setIsWithdrawModalOpen(true);
+                    } else {
+                      triggerToast('Wallet is empty. Deposit first.', 'info');
+                    }
+                  }}
+                  className="jp-profile-action-btn jp-btn-withdraw-mpesa"
+                >
+                  <Icon name="wallet" size={14} />
+                  <span>WITHDRAW (B2C)</span>
+                </button>
+              </div>
+
+              {/* Linked M-Pesa Phone */}
+              <div className="jp-input-group-vertical" style={{ marginTop: '10px' }}>
+                <label className="jp-profile-input-label">
+                  <span>PRIMARY M-PESA NUMBER</span>
+                  <span className="jp-mpesa-active-pill">🟢 STK Active</span>
+                </label>
+                <div className="jp-phone-input-wrap">
+                  <span className="jp-phone-prefix">+254</span>
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="7XXXXXXXX"
+                    className="jp-profile-text-input"
+                  />
+                </div>
+                <span className="jp-input-helper-text">
+                  Used for Instant STK Push deposits and B2C automated withdrawals.
+                </span>
+              </div>
+            </div>
+
+            {/* Card 3: Kenyan Market Activity & Career Stats */}
+            <div className="jp-profile-card">
+              <div className="jp-card-section-title">
+                <Icon name="bar-chart-3" size={14} />
+                <span>ACTIVITY & PILOT PERFORMANCE</span>
+              </div>
+
+              <div className="jp-stats-4grid">
+                <div className="jp-stat-tile">
+                  <span className="jp-stat-tile-label">RECORDED WAGERS</span>
+                  <span className="jp-stat-tile-val">{myBetsHistory.length} / 10 Bets</span>
+                </div>
+                <div className="jp-stat-tile">
+                  <span className="jp-stat-tile-label">TOTAL STAKED</span>
+                  <span className="jp-stat-tile-val">KES {profileTotalStake.toLocaleString()}</span>
+                </div>
+                <div className="jp-stat-tile">
+                  <span className="jp-stat-tile-label">TOTAL WON</span>
+                  <span className="jp-stat-tile-val jp-green-text">KES {profileTotalWon.toLocaleString()}</span>
+                </div>
+                <div className="jp-stat-tile">
+                  <span className="jp-stat-tile-label">NET PROFIT</span>
+                  <span className={`jp-stat-tile-val ${profileNetProfit >= 0 ? 'jp-green-text' : 'jp-rose-text'}`}>
+                    {profileNetProfit >= 0 ? '+' : ''}KES {profileNetProfit.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <div className="jp-stat-secondary-row">
+                <div className="jp-stat-mini-pill">
+                  <span>BEST MULTIPLIER:</span>
+                  <strong style={{ color: profileBestMultiplier >= 10 ? '#fbbf24' : '#c084fc' }}>
+                    {profileBestMultiplier > 0 ? `${profileBestMultiplier.toFixed(2)}x` : '—'}
+                  </strong>
+                </div>
+                <div className="jp-stat-mini-pill">
+                  <span>WIN RATE:</span>
+                  <strong style={{ color: profileWinRate >= 50 ? '#22c55e' : '#94a3b8' }}>{profileWinRate}%</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Account Details & Editing */}
+            <div className="jp-profile-card">
+              <div className="jp-card-section-title">
+                <Icon name="settings" size={14} />
+                <span>ACCOUNT & NICKNAME</span>
+              </div>
+
+              <div className="jp-input-group-vertical">
+                <label className="jp-profile-input-label">DISPLAY NAME / PILOT NICKNAME</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Your nickname"
+                  className="jp-profile-text-input"
+                />
+              </div>
+
+              <div className="jp-input-group-vertical" style={{ marginTop: '8px' }}>
+                <label className="jp-profile-input-label">REGISTERED SYSTEM EMAIL</label>
+                <input
+                  type="text"
+                  value={user?.email || `${editPhone || 'pilot'}@phone.jetpesa.com`}
+                  disabled
+                  readOnly
+                  className="jp-profile-text-input jp-input-disabled"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleProfileUpdate}
+                className="jp-save-profile-btn"
+              >
+                <Icon name="check" size={14} />
+                <span>SAVE PROFILE CHANGES</span>
+              </button>
+            </div>
+
+            {/* Card 5: BCLB Regulatory Notice & Responsible Gaming */}
+            <div className="jp-profile-card jp-bclb-card">
+              <div className="jp-bclb-header">
+                <Icon name="shield-check" size={16} />
+                <span>BETTING CONTROL & LICENSING BOARD (BCLB)</span>
+              </div>
+              <p className="jp-bclb-text">
+                JetPesa operates in full compliance with the Betting, Lotteries and Gaming Act (Cap 131, Laws of Kenya).
+                Strictly 18+ only. Gambling can be addictive and financially hazardous. Play responsibly and set personal wager limits.
+              </p>
+              <div className="jp-bclb-controls">
+                <div className="jp-limit-chip">
+                  <span className="jp-limit-label">DAILY STAKE LIMIT:</span>
+                  <span className="jp-limit-val">KES 50,000 / Day</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileModalOpen(false);
+                    setIsProvablyModalOpen(true);
+                  }}
+                  className="jp-provably-verify-btn"
+                >
+                  <span>AUDIT PROVABLY FAIR SEED</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Card 6: Session & Sign Out */}
+            <div className="jp-profile-card" style={{ textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="jp-signout-btn"
+              >
+                <span>SIGN OUT OF JETPESA</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -3915,6 +3853,26 @@ export default function UltimateJetPesaCockpit() {
         .jp-modal-blue { border-color: #38bdf8; }
         .jp-modal-orange { border-color: #f59e0b; }
         .jp-modal-purple { border-color: #a855f7; max-width: 500px; }
+        .jp-modal-profile {
+          max-width: 520px !important;
+          background: #0d1017 !important;
+          border: 1px solid rgba(56, 189, 248, 0.35) !important;
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 24px rgba(56, 189, 248, 0.1) !important;
+          padding: 20px !important;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          max-height: 88vh !important;
+          overflow-y: auto !important;
+        }
+        .jp-profile-modal-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding-bottom: 10px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          margin-right: 28px;
+        }
         .jp-modal-close { position: absolute; top: 12px; right: 14px; background: transparent; border: none; color: #64748b; cursor: pointer; padding: 4px; border-radius: 6px; }
         .jp-modal-close:hover { color: #fff; background: rgba(255,255,255,0.1); }
         .jp-modal-title { margin: 0 0 14px; font-weight: 900; font-size: 17px; }
