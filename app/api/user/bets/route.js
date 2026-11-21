@@ -15,46 +15,70 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '10', 10)));
+    const gameFilter = (searchParams.get('game') || searchParams.get('game_type') || '').toLowerCase();
 
     const state = getCycleState();
 
-    // 1. Resolve any past active bets that are finished/crashed
-    try {
-      if (state?.cycleIndex) {
-        await sql.query(`
-          UPDATE public.bets
-          SET status = 'CRASHED'
-          WHERE user_id = $1 
-            AND status = 'ACTIVE'
-            AND (round_id ~ '^[0-9]+$')
-            AND (
-              CAST(round_id AS BIGINT) < $2
-              OR (CAST(round_id AS BIGINT) = $2 AND $3 = true)
-            )
-        `, [userId, state.cycleIndex, Boolean(state.hasCrashed)]);
+    // 1. Resolve any past active bets that are finished/crashed (for aviator)
+    if (!gameFilter || gameFilter === 'aviator' || gameFilter === 'all') {
+      try {
+        if (state?.cycleIndex) {
+          await sql.query(`
+            UPDATE public.bets
+            SET status = 'CRASHED'
+            WHERE user_id = $1 
+              AND status = 'ACTIVE'
+              AND (game_type = 'aviator' OR game_type IS NULL)
+              AND (round_id ~ '^[0-9]+$')
+              AND (
+                CAST(round_id AS BIGINT) < $2
+                OR (CAST(round_id AS BIGINT) = $2 AND $3 = true)
+              )
+          `, [userId, state.cycleIndex, Boolean(state.hasCrashed)]);
+        }
+      } catch (e) {
+        console.warn('Stale bet status resolution warning:', e.message);
       }
-    } catch (e) {
-      console.warn('Stale bet status resolution warning:', e.message);
     }
 
-    // 2. Fetch the user's latest bets up to limit (default 10)
-    const rows = await sql.query(`
-      SELECT 
-        id,
-        user_id,
-        round_id,
-        deck,
-        stake,
-        auto_cashout,
-        multiplier,
-        win_amount,
-        status,
-        created_at
-      FROM public.bets
-      WHERE user_id = $1
-      ORDER BY created_at DESC
-      LIMIT $2
-    `, [userId, limit]);
+    // 2. Fetch the user's latest bets up to limit (filtered by game if requested)
+    const rows = (gameFilter && gameFilter !== 'all')
+      ? await sql.query(`
+          SELECT 
+            id,
+            user_id,
+            round_id,
+            deck,
+            stake,
+            auto_cashout,
+            multiplier,
+            win_amount,
+            status,
+            game_type,
+            created_at
+          FROM public.bets
+          WHERE user_id = $1 AND game_type = $2
+          ORDER BY created_at DESC
+          LIMIT $3
+        `, [userId, gameFilter, limit])
+      : await sql.query(`
+          SELECT 
+            id,
+            user_id,
+            round_id,
+            deck,
+            stake,
+            auto_cashout,
+            multiplier,
+            win_amount,
+            status,
+            game_type,
+            created_at
+          FROM public.bets
+          WHERE user_id = $1
+          ORDER BY created_at DESC
+          LIMIT $2
+        `, [userId, limit]);
 
     let totalWagered = 0;
     let totalWon = 0;
@@ -92,6 +116,7 @@ export async function GET(request) {
       return {
         id: r.id,
         roundId: r.round_id,
+        gameType: r.game_type || 'aviator',
         deck: r.deck || 'A',
         stake,
         autoCashout: r.auto_cashout ? Number(r.auto_cashout) : null,

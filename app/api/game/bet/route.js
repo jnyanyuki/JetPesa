@@ -27,7 +27,8 @@ export async function POST(request) {
       );
     }
 
-    const { deck, wager, autoCashout, roundId } = body;
+    const { deck, wager, autoCashout, roundId, gameType, game_type } = body;
+    const targetGameType = String(gameType || game_type || 'aviator').toLowerCase();
 
     const cleanDeck = String(deck || '').toUpperCase();
     if (cleanDeck !== 'A' && cleanDeck !== 'B') {
@@ -106,12 +107,13 @@ export async function POST(request) {
 
       // 4. Record active bet
       await client.query(`
-        INSERT INTO public.bets (id, user_id, round_id, deck, stake, auto_cashout, status)
-        VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')
+        INSERT INTO public.bets (id, user_id, round_id, deck, stake, auto_cashout, status, game_type)
+        VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', $7)
         ON CONFLICT (id) DO UPDATE SET
           stake = EXCLUDED.stake,
           auto_cashout = EXCLUDED.auto_cashout,
-          status = 'ACTIVE'
+          status = 'ACTIVE',
+          game_type = EXCLUDED.game_type
       `, [
         betId,
         userId,
@@ -119,6 +121,7 @@ export async function POST(request) {
         cleanDeck,
         amt,
         autoCashout ? parseFloat(Number(autoCashout).toFixed(2)) : null,
+        targetGameType,
       ]);
 
       return {

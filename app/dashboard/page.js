@@ -7,6 +7,9 @@ import confetti from 'canvas-confetti';
 import { generateDynamicLobbyChat } from '../../lib/chatEngine';
 import { getRandomPlayerPersona, getPersonaBySeed } from '../../lib/playerSeeds';
 import { SPRIBE_PLANE_DATA_URL } from '../../lib/planeAsset';
+import { getGameById, GAMES_REGISTRY } from '../../lib/games/registry';
+import GameLobbyModal from '../../components/games/GameLobbyModal';
+import GamePlaceholder from '../../components/games/GamePlaceholder';
 
 const MIN_WAGER = 10;
 const HISTORY_STORAGE_KEY = 'jetpesa_real_previous_rounds';
@@ -76,6 +79,15 @@ function Icon({ name, size = 18, className = '', style = {} }) {
       return <svg {...props}><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>;
     case 'clock':
       return <svg {...props}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
+    case 'grid':
+      return (
+        <svg {...props}>
+          <rect width="7" height="7" x="3" y="3" rx="1" />
+          <rect width="7" height="7" x="14" y="3" rx="1" />
+          <rect width="7" height="7" x="14" y="14" rx="1" />
+          <rect width="7" height="7" x="3" y="14" rx="1" />
+        </svg>
+      );
     case 'settings':
       return (
         <svg {...props}>
@@ -135,6 +147,10 @@ export default function UltimateJetPesaCockpit() {
 
   const [myBetsHistory, setMyBetsHistory] = useState([]);
   const [activeTab, setActiveTab] = useState('all');
+  const [activeGameId, setActiveGameId] = useState('aviator');
+  const [isLobbyModalOpen, setIsLobbyModalOpen] = useState(false);
+  const currentGameConfig = useMemo(() => getGameById(activeGameId), [activeGameId]);
+
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
@@ -669,7 +685,7 @@ export default function UltimateJetPesaCockpit() {
 
   const fetchMyBetsHistory = useCallback(async () => {
     try {
-      const res = await fetch('/api/user/bets?limit=10');
+      const res = await fetch(`/api/user/bets?limit=10&game=${activeGameId}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.bets)) {
@@ -679,7 +695,7 @@ export default function UltimateJetPesaCockpit() {
     } catch (err) {
       console.warn('Error fetching my bets history:', err);
     }
-  }, []);
+  }, [activeGameId]);
 
   useEffect(() => {
     if (activeTab === 'mine') {
@@ -1932,6 +1948,22 @@ export default function UltimateJetPesaCockpit() {
       <header className="jp-header">
         <div className="jp-header-left">
           <span className="jp-brand-text">JET<span className="jp-brand-accent">PESA</span></span>
+          <button
+            type="button"
+            className="jp-game-selector-btn"
+            onClick={() => setIsLobbyModalOpen(true)}
+            title="Browse All Casino & Crash Games"
+          >
+            <div className="jp-active-game-pill">
+              <span className="jp-game-dot" style={{ background: currentGameConfig.accentColor }} />
+              <span className="jp-game-name">{currentGameConfig.shortName}</span>
+              <span className="jp-game-cat-tag">{currentGameConfig.category.toUpperCase()}</span>
+            </div>
+            <div className="jp-lobby-open-tag">
+              <Icon name="grid" size={12} />
+              <span>GAMES</span>
+            </div>
+          </button>
           <button className="jp-fair-btn" onClick={openProvablyModal}>
             <Icon name="shield-check" size={13} />
             <span className="jp-fair-label">FAIR #{currentRoundRef.current.nonce}</span>
@@ -1988,49 +2020,59 @@ export default function UltimateJetPesaCockpit() {
           className="jp-center-panel"
           data-active={mobileActivePanel === 'game' || mobileActivePanel === 'bets'}
         >
-          <div className="jp-canvas-container">
-            {gameStatus === 'idle' && (
-              <div className="jp-idle-overlay">
-                <div className="jp-countdown-timer-wrap">
-                  <div className="jp-countdown-badge">
-                    <Icon name="clock" size={13} className="jp-countdown-clock-icon" />
-                    <span>NEXT ROUND IN</span>
+          {activeGameId === 'aviator' ? (
+            <>
+              <div className="jp-canvas-container">
+                {gameStatus === 'idle' && (
+                  <div className="jp-idle-overlay">
+                    <div className="jp-countdown-timer-wrap">
+                      <div className="jp-countdown-badge">
+                        <Icon name="clock" size={13} className="jp-countdown-clock-icon" />
+                        <span>NEXT ROUND IN</span>
+                      </div>
+                      <div className="jp-countdown-digital">
+                        <span ref={countdownTextRef} className="jp-countdown-digits">{countdownSeconds}s</span>
+                      </div>
+                    </div>
+                    <div className="jp-progress-track">
+                      <div
+                        ref={progressFillRef}
+                        className="jp-progress-fill"
+                        style={{ width: `${countdownProgress}%` }}
+                      />
+                    </div>
+                    <span className="jp-idle-text">WAITING FOR NEXT FLIGHT...</span>
+                    <span className="jp-idle-sub">Place your bets · Wagers closing soon</span>
                   </div>
-                  <div className="jp-countdown-digital">
-                    <span ref={countdownTextRef} className="jp-countdown-digits">{countdownSeconds}s</span>
+                )}
+                <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+                {gameStatus !== 'idle' && (
+                  <div className="jp-multiplier-overlay">
+                    {gameStatus === 'crashed' ? (
+                      <div>
+                        <h1 className="jp-crashed-title"><Icon name="x-circle" size={32} className="jp-crash-icon" />FLEW AWAY</h1>
+                        <span className="jp-crashed-sub">Ended @ {multiplier.toFixed(2)}x</span>
+                      </div>
+                    ) : (
+                      <h1 className="jp-multiplier-text">{multiplier.toFixed(2)}x</h1>
+                    )}
                   </div>
-                </div>
-                <div className="jp-progress-track">
-                  <div
-                    ref={progressFillRef}
-                    className="jp-progress-fill"
-                    style={{ width: `${countdownProgress}%` }}
-                  />
-                </div>
-                <span className="jp-idle-text">WAITING FOR NEXT FLIGHT...</span>
-                <span className="jp-idle-sub">Place your bets · Wagers closing soon</span>
-              </div>
-            )}
-            <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
-            {gameStatus !== 'idle' && (
-              <div className="jp-multiplier-overlay">
-                {gameStatus === 'crashed' ? (
-                  <div>
-                    <h1 className="jp-crashed-title"><Icon name="x-circle" size={32} className="jp-crash-icon" />FLEW AWAY</h1>
-                    <span className="jp-crashed-sub">Ended @ {multiplier.toFixed(2)}x</span>
-                  </div>
-                ) : (
-                  <h1 className="jp-multiplier-text">{multiplier.toFixed(2)}x</h1>
                 )}
               </div>
-            )}
-          </div>
 
-          {/* Two Betting Decks (Deck A & Deck B) */}
-          <div className="jp-deck-grid">
-            {renderDeckPanel('A', deckA, setDeckA)}
-            {renderDeckPanel('B', deckB, setDeckB)}
-          </div>
+              {/* Two Betting Decks (Deck A & Deck B) */}
+              <div className="jp-deck-grid">
+                {renderDeckPanel('A', deckA, setDeckA)}
+                {renderDeckPanel('B', deckB, setDeckB)}
+              </div>
+            </>
+          ) : (
+            <GamePlaceholder
+              gameId={activeGameId}
+              onBackToAviator={() => setActiveGameId('aviator')}
+              onOpenLobby={() => setIsLobbyModalOpen(true)}
+            />
+          )}
 
           {/* LIVE Section Directly Below the GAME Two Decks Section */}
           <div ref={liveSectionRef} className="jp-panel jp-live-below-decks">
@@ -2447,6 +2489,19 @@ export default function UltimateJetPesaCockpit() {
         </div>
       )}
 
+      {/* Game Lobby Modal */}
+      <GameLobbyModal
+        isOpen={isLobbyModalOpen}
+        onClose={() => setIsLobbyModalOpen(false)}
+        activeGameId={activeGameId}
+        onSelectGame={(id) => {
+          setActiveGameId(id);
+          if (id === 'aviator') {
+            fetchMyBetsHistory();
+          }
+        }}
+      />
+
 
 
       <style dangerouslySetInnerHTML={{ __html: `
@@ -2521,6 +2576,64 @@ export default function UltimateJetPesaCockpit() {
           align-items: center;
           gap: 10px;
           flex-shrink: 0;
+        }
+        .jp-game-selector-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 999px;
+          padding: 3px 6px 3px 10px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .jp-game-selector-btn:hover {
+          background: rgba(255, 255, 255, 0.08);
+          border-color: rgba(239, 68, 68, 0.4);
+        }
+        .jp-active-game-pill {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .jp-game-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          box-shadow: 0 0 8px currentColor;
+        }
+        .jp-game-name {
+          font-size: 11.5px;
+          font-weight: 900;
+          color: #ffffff;
+          letter-spacing: 0.02em;
+        }
+        .jp-game-cat-tag {
+          font-size: 8.5px;
+          font-weight: 800;
+          color: #94a3b8;
+          background: rgba(255, 255, 255, 0.06);
+          padding: 1px 5px;
+          border-radius: 4px;
+        }
+        .jp-lobby-open-tag {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: rgba(239, 68, 68, 0.18);
+          border: 1px solid rgba(239, 68, 68, 0.4);
+          color: #f87171;
+          font-size: 10px;
+          font-weight: 900;
+          padding: 3px 8px;
+          border-radius: 999px;
+          letter-spacing: 0.05em;
+          transition: all 0.15s ease;
+        }
+        .jp-game-selector-btn:hover .jp-lobby-open-tag {
+          background: #ef4444;
+          color: #ffffff;
         }
         .jp-header-right {
           display: flex;
