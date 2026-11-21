@@ -11,6 +11,7 @@ import { getGameById, GAMES_REGISTRY } from '../../lib/games/registry';
 import GamePlaceholder from '../../components/games/GamePlaceholder';
 import MinesGame from '../../components/games/mines/MinesGame';
 import PenaltyGame from '../../components/games/penalty/PenaltyGame';
+import PlinkoGame from '../../components/games/plinko/PlinkoGame';
 
 const MIN_WAGER = 10;
 const HISTORY_STORAGE_KEY = 'jetpesa_real_previous_rounds';
@@ -2083,6 +2084,14 @@ export default function UltimateJetPesaCockpit() {
             />
           ) : activeGameId === 'penalty' ? (
             <PenaltyGame
+              balance={balance}
+              onBalanceChange={setBalance}
+              triggerToast={triggerToast}
+              onOpenDeposit={() => setIsDepositModalOpen(true)}
+              onOpenProvably={openProvablyModal}
+            />
+          ) : activeGameId === 'plinko' ? (
+            <PlinkoGame
               balance={balance}
               onBalanceChange={setBalance}
               triggerToast={triggerToast}
