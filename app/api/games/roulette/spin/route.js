@@ -124,7 +124,7 @@ export async function POST(request) {
       }
 
       // 4. Record spin in public.roulette_spins
-      await client.query(`
+      const spinRes = await client.query(`
         INSERT INTO public.roulette_spins (
           user_id, total_stake, bets, winning_number, winning_color,
           total_payout, net_profit, status, server_seed,
@@ -132,6 +132,7 @@ export async function POST(request) {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, 'COMPLETED', $8, $9, $10, $11
         )
+        RETURNING id
       `, [
         userId,
         totalStake,
@@ -145,6 +146,8 @@ export async function POST(request) {
         clientSeed,
         nonce,
       ]);
+
+      const spinId = `SPIN-${spinRes.rows[0].id}`;
 
       // 5. Record bet in public.bets for platform history
       const betStatus = totalPayout > 0 ? 'WON' : 'LOST';
