@@ -8,7 +8,6 @@ import { generateDynamicLobbyChat } from '../../lib/chatEngine';
 import { getRandomPlayerPersona, getPersonaBySeed } from '../../lib/playerSeeds';
 import { SPRIBE_PLANE_DATA_URL } from '../../lib/planeAsset';
 import { getGameById, GAMES_REGISTRY } from '../../lib/games/registry';
-import GameLobbyModal from '../../components/games/GameLobbyModal';
 import GamePlaceholder from '../../components/games/GamePlaceholder';
 import MinesGame from '../../components/games/mines/MinesGame';
 
@@ -149,7 +148,6 @@ export default function UltimateJetPesaCockpit() {
   const [myBetsHistory, setMyBetsHistory] = useState([]);
   const [activeTab, setActiveTab] = useState('all');
   const [activeGameId, setActiveGameId] = useState('aviator');
-  const [isLobbyModalOpen, setIsLobbyModalOpen] = useState(false);
   const currentGameConfig = useMemo(() => getGameById(activeGameId), [activeGameId]);
 
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
@@ -1959,8 +1957,8 @@ export default function UltimateJetPesaCockpit() {
           <button
             type="button"
             className="jp-game-selector-btn"
-            onClick={() => setIsLobbyModalOpen(true)}
-            title="Browse All Casino & Crash Games"
+            onClick={() => router.push('/games')}
+            title="Browse All Casino & Crash Games at /games"
           >
             <div className="jp-active-game-pill">
               <span className="jp-game-dot" style={{ background: currentGameConfig.accentColor }} />
@@ -2086,7 +2084,7 @@ export default function UltimateJetPesaCockpit() {
             <GamePlaceholder
               gameId={activeGameId}
               onBackToAviator={() => setActiveGameId('aviator')}
-              onOpenLobby={() => setIsLobbyModalOpen(true)}
+              onOpenLobby={() => router.push('/games')}
             />
           )}
 
@@ -2504,21 +2502,6 @@ export default function UltimateJetPesaCockpit() {
           </div>
         </div>
       )}
-
-      {/* Game Lobby Modal */}
-      <GameLobbyModal
-        isOpen={isLobbyModalOpen}
-        onClose={() => setIsLobbyModalOpen(false)}
-        activeGameId={activeGameId}
-        onSelectGame={(id) => {
-          setActiveGameId(id);
-          if (id === 'aviator') {
-            fetchMyBetsHistory();
-          }
-        }}
-      />
-
-
 
       <style dangerouslySetInnerHTML={{ __html: `
         /* === BASE === */
