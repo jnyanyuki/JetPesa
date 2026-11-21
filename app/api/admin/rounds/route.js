@@ -11,13 +11,19 @@ import {
   getRoundProfitTarget,
   getGlobalProfitTarget,
   setGlobalProfitTarget,
+  setRoundProfitTargetGlobal,
+  getRoundProfitTargetGlobal,
+  setDailyProfitEngineGlobal,
+  getDailyProfitEngineGlobal,
 } from '../../../../lib/gameEngine';
 import {
   evaluateAndEnforceProfitTarget,
   setRoundProfitTargetDb,
   clearRoundProfitTargetDb,
   setGlobalProfitTargetDb,
-  loadGlobalProfitTargetFromDb,
+  setRoundProfitTargetGlobalDb,
+  setDailyProfitEngineDb,
+  loadAllProfitSettingsFromDb,
 } from '../../../../lib/profitTargetEngine';
 
 export const dynamic = 'force-dynamic';
@@ -35,7 +41,7 @@ export async function GET(request) {
 
     // Preload system-wide settings and overrides from PostgreSQL
     try {
-      await loadGlobalProfitTargetFromDb();
+      await loadAllProfitSettingsFromDb();
 
       const dbOverrides = await sql.query(`
         SELECT round_id, crash_point, target_profit_percent, target_profit_kes FROM public.round_overrides
@@ -313,14 +319,17 @@ export async function GET(request) {
       console.warn('Could not load treasury stats for radar:', te.message);
     }
 
-    // Compute Daily House Profit Target based on Real Pay-Ins and Player Account Liabilities
-    const currentGlobalTarget = getGlobalProfitTarget();
-    const targetPct = currentGlobalTarget.percent || 50;
+    // 1. Independent Top Panel: Round Profit Target (All Rounds Real Wagers Lock)
+    const currentRoundTarget = getRoundProfitTargetGlobal();
+
+    // 2. Independent Right Panel: House Profit Engine & Daily Target (Player Funds & Pay-Ins Protection)
+    const currentDailyEngine = getDailyProfitEngineGlobal();
+    const dailyTargetPct = currentDailyEngine.percent || 50;
     const depBase = (dailyStats.depositsTotal > 0) ? dailyStats.depositsTotal : treasuryStats.allTimeDeposits;
     
     // Pay-ins retention target vs Player wallet funds coverage
-    const targetFromPayIns = depBase * (targetPct / 100);
-    const targetFromLiabilities = treasuryStats.totalLiabilities * (targetPct / 100);
+    const targetFromPayIns = depBase * (dailyTargetPct / 100);
+    const targetFromLiabilities = treasuryStats.totalLiabilities * (dailyTargetPct / 100);
     
     // Daily target locks the pay-in margin while ensuring player balance exposure is defended
     const calculatedDailyTargetKes = Math.round(Math.max(targetFromPayIns, targetFromLiabilities * 0.35, 500));
@@ -330,8 +339,8 @@ export async function GET(request) {
     const payInRetentionPct = depBase > 0 ? Math.round((currentGgr / depBase) * 100) : 0;
 
     const houseProfitEngine = {
-      enabled: Boolean(currentGlobalTarget.enabled),
-      targetPercent: targetPct,
+      enabled: Boolean(currentDailyEngine.enabled),
+      targetPercent: dailyTargetPct,
       totalUsers: treasuryStats.totalUsers,
       totalLiabilities: treasuryStats.totalLiabilities,
       allTimeDeposits: treasuryStats.allTimeDeposits,
@@ -350,7 +359,8 @@ export async function GET(request) {
     return NextResponse.json({
       success: true,
       ...data,
-      globalProfitTarget: currentGlobalTarget,
+      roundProfitTarget: currentRoundTarget,
+      globalProfitTarget: currentRoundTarget,
       inFlightStats,
       dailyStats,
       treasuryStats,
@@ -370,15 +380,38 @@ export async function POST(request) {
     const body = await request.json();
     const { action, enabled, percent, cycleIndex, crashPoint, note, instantCrash, targetProfitPercent, targetProfitKes } = body;
 
-    // 1. System-wide Global Profit Target (Affects ALL rounds continuously)
-    if (action === 'setGlobalProfitTarget' || action === 'toggleProfitTarget' || action === 'setGlobalTarget' || body.globalProfitTarget !== undefined) {
-      const isEnabled = enabled !== undefined ? enabled : body.globalProfitTarget?.enabled;
-      const targetPct = percent !== undefined ? percent : (targetProfitPercent || body.globalProfitTarget?.percent);
-      const result = await setGlobalProfitTargetDb(isEnabled, targetPct);
+    // 1. Top Panel: Round Profit Target (Affects ALL rounds real wagers continuously)
+    if (
+      action === 'setRoundProfitTarget' || 
+      action === 'toggleRoundProfitTarget' || 
+      action === 'setGlobalProfitTarget' || 
+      action === 'toggleProfitTarget' || 
+      action === 'setGlobalTarget' || 
+      body.roundProfitTarget !== undefined
+    ) {
+      const isEnabled = enabled !== undefined ? enabled : body.roundProfitTarget?.enabled;
+      const targetPct = percent !== undefined ? percent : (targetProfitPercent || body.roundProfitTarget?.percent);
+      const result = await setRoundProfitTargetGlobalDb(isEnabled, targetPct);
       return NextResponse.json({
         success: true,
         ...result,
-        globalProfitTarget: getGlobalProfitTarget(),
+        roundProfitTarget: getRoundProfitTargetGlobal(),
+      });
+    }
+
+    // 2. Right Panel: House Profit Engine & Daily Target (Player accounts & Pay-Ins Protection)
+    if (
+      action === 'setDailyProfitEngine' || 
+      action === 'toggleDailyProfitEngine' || 
+      body.dailyProfitEngine !== undefined
+    ) {
+      const isEnabled = enabled !== undefined ? enabled : body.dailyProfitEngine?.enabled;
+      const targetPct = percent !== undefined ? percent : body.dailyProfitEngine?.percent;
+      const result = await setDailyProfitEngineDb(isEnabled, targetPct);
+      return NextResponse.json({
+        success: true,
+        ...result,
+        dailyProfitEngine: getDailyProfitEngineGlobal(),
       });
     }
 

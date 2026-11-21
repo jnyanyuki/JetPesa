@@ -28,10 +28,15 @@ export default function JetPesaAdminPage() {
   const [instantCrashing, setInstantCrashing] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // System-wide Global House Profit Target mechanism state (affects all rounds continuously)
-  const [profitTargetInput, setProfitTargetInput] = useState('50');
-  const [profitTargetEnabled, setProfitTargetEnabled] = useState(false);
-  const [profitTargetLoading, setProfitTargetLoading] = useState(false);
+  // TOP PANEL: Independent Round Profit Target state (focuses on all rounds real wagers profit lock)
+  const [roundProfitInput, setRoundProfitInput] = useState('50');
+  const [roundProfitEnabled, setRoundProfitEnabled] = useState(false);
+  const [roundProfitLoading, setRoundProfitLoading] = useState(false);
+
+  // RIGHT PANEL: Independent House Profit Engine & Daily Target state (player accounts & pay-ins protection)
+  const [dailyTargetInput, setDailyTargetInput] = useState('50');
+  const [dailyTargetEnabled, setDailyTargetEnabled] = useState(false);
+  const [dailyTargetLoading, setDailyTargetLoading] = useState(false);
   const [houseProfitEngine, setHouseProfitEngine] = useState(null);
 
   const pollTimerRef = useRef(null);
@@ -103,11 +108,22 @@ export default function JetPesaAdminPage() {
         setCurrentCycleState(data.currentState || null);
         if (data.inFlightStats) setInFlightStats(data.inFlightStats);
         if (data.dailyStats) setDailyStats(data.dailyStats);
-        if (data.houseProfitEngine) setHouseProfitEngine(data.houseProfitEngine);
-        if (data.globalProfitTarget) {
-          setProfitTargetEnabled(Boolean(data.globalProfitTarget.enabled));
-          if (data.globalProfitTarget.percent !== undefined && data.globalProfitTarget.percent !== null) {
-            setProfitTargetInput(String(data.globalProfitTarget.percent));
+        
+        // 1. Top Panel: Round Profit Target (All rounds real wagers lock)
+        const roundTarget = data.roundProfitTarget || data.globalProfitTarget;
+        if (roundTarget) {
+          setRoundProfitEnabled(Boolean(roundTarget.enabled));
+          if (roundTarget.percent !== undefined && roundTarget.percent !== null) {
+            setRoundProfitInput(String(roundTarget.percent));
+          }
+        }
+
+        // 2. Right Panel: House Profit Engine & Daily Target (Player accounts & Pay-Ins Protection)
+        if (data.houseProfitEngine) {
+          setHouseProfitEngine(data.houseProfitEngine);
+          setDailyTargetEnabled(Boolean(data.houseProfitEngine.enabled));
+          if (data.houseProfitEngine.targetPercent !== undefined && data.houseProfitEngine.targetPercent !== null) {
+            setDailyTargetInput(String(data.houseProfitEngine.targetPercent));
           }
         }
       }
@@ -267,68 +283,135 @@ export default function JetPesaAdminPage() {
     }
   };
 
-  // Toggle System-Wide House Profit Target ON / OFF across ALL rounds
-  const handleToggleProfitTarget = async () => {
-    const nextState = !profitTargetEnabled;
-    const val = parseFloat(profitTargetInput);
+  // TOP PANEL: Toggle Round Profit Target ON / OFF across ALL rounds real wagers
+  const handleToggleRoundProfit = async () => {
+    const nextState = !roundProfitEnabled;
+    const val = parseFloat(roundProfitInput);
     const safeVal = isNaN(val) || val < 1 || val > 100 ? 50 : val;
 
-    setProfitTargetLoading(true);
+    setRoundProfitLoading(true);
     try {
       const res = await adminFetch('/api/admin/rounds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'setGlobalProfitTarget',
+          action: 'setRoundProfitTarget',
           enabled: nextState,
           percent: safeVal,
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to toggle profit target.');
-      setProfitTargetEnabled(nextState);
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to toggle round profit target.');
+      setRoundProfitEnabled(nextState);
       showToast(
         nextState 
-          ? `🎯 System Profit Target ACTIVATED (${safeVal}% on all rounds continuously)!` 
-          : 'System Profit Target DISABLED (Provably Fair natural flight enabled).'
+          ? `🎯 Round Profit Target ACTIVATED (${safeVal}% on all rounds real wagers)!` 
+          : 'Round Profit Target DISABLED (Provably Fair natural flight enabled).'
       );
       await loadRoundsRadar();
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
-      setProfitTargetLoading(false);
+      setRoundProfitLoading(false);
     }
   };
 
-  // Save / Update Profit Target Percentage across ALL rounds
-  const handleSaveProfitPercent = async (customVal) => {
-    const rawVal = customVal !== undefined ? customVal : profitTargetInput;
+  // TOP PANEL: Save / Update Round Profit Target Percentage across ALL rounds real wagers
+  const handleSaveRoundProfit = async (customVal) => {
+    const rawVal = customVal !== undefined ? customVal : roundProfitInput;
     const val = parseFloat(rawVal);
     if (isNaN(val) || val < 1 || val > 100) {
-      showToast('Please enter a percentage profit target between 1% and 100%.', 'error');
+      showToast('Please enter a round profit target percentage between 1% and 100%.', 'error');
       return;
     }
 
-    setProfitTargetLoading(true);
+    setRoundProfitLoading(true);
     try {
       const res = await adminFetch('/api/admin/rounds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'setGlobalProfitTarget',
+          action: 'setRoundProfitTarget',
           enabled: true,
           percent: val,
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to update profit target.');
-      setProfitTargetEnabled(true);
-      showToast(`🎯 System Profit Target set to ${val}% (calculated from pay-ins & player funds).`);
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to update round profit target.');
+      setRoundProfitEnabled(true);
+      setRoundProfitInput(String(val));
+      showToast(`🎯 Round Profit Target set to ${val}% of real wagers across all rounds.`);
       await loadRoundsRadar();
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
-      setProfitTargetLoading(false);
+      setRoundProfitLoading(false);
+    }
+  };
+
+  // RIGHT PANEL: Toggle House Profit Engine & Daily Target (Player accounts & Pay-Ins Protection)
+  const handleToggleDailyTarget = async () => {
+    const nextState = !dailyTargetEnabled;
+    const val = parseFloat(dailyTargetInput);
+    const safeVal = isNaN(val) || val < 1 || val > 100 ? 50 : val;
+
+    setDailyTargetLoading(true);
+    try {
+      const res = await adminFetch('/api/admin/rounds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'setDailyProfitEngine',
+          enabled: nextState,
+          percent: safeVal,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to toggle daily profit engine.');
+      setDailyTargetEnabled(nextState);
+      showToast(
+        nextState 
+          ? `🛡️ Daily Profit Target ACTIVATED (${safeVal}% pay-ins margin & player funds protection)!` 
+          : 'Daily Profit Target set to pass-through.'
+      );
+      await loadRoundsRadar();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setDailyTargetLoading(false);
+    }
+  };
+
+  // RIGHT PANEL: Save / Update Daily Profit Target Percentage
+  const handleSaveDailyTarget = async (customVal) => {
+    const rawVal = customVal !== undefined ? customVal : dailyTargetInput;
+    const val = parseFloat(rawVal);
+    if (isNaN(val) || val < 1 || val > 100) {
+      showToast('Please enter a daily profit target percentage between 1% and 100%.', 'error');
+      return;
+    }
+
+    setDailyTargetLoading(true);
+    try {
+      const res = await adminFetch('/api/admin/rounds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'setDailyProfitEngine',
+          enabled: true,
+          percent: val,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to update daily profit target.');
+      setDailyTargetEnabled(true);
+      setDailyTargetInput(String(val));
+      showToast(`🛡️ Daily Profit Target set to ${val}% of real deposits & player funds.`);
+      await loadRoundsRadar();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setDailyTargetLoading(false);
     }
   };
 
@@ -437,29 +520,48 @@ export default function JetPesaAdminPage() {
           <h1>JETPESA ORACLE</h1>
         </div>
 
-        {/* System-Wide Continuous Percentage Profit Target Strip */}
+        {/* System-Wide Continuous Round Profit Target Strip (Independent) */}
         <div className="jp-admin-profit-strip">
           <div className="jp-profit-left-group">
-            <span className="jp-profit-badge-label">
+            <span className="jp-profit-badge-label" title="Focuses on all rounds real wager profit target to ensure the system locks in profits">
               <span className="jp-profit-target-icon">🎯</span>
-              <span className="jp-profit-title">SYSTEM PROFIT TARGET</span>
+              <span className="jp-profit-title">ROUND PROFIT TARGET</span>
             </span>
 
             {/* Interactive ON / OFF Toggle Switch */}
             <div 
-              className={`jp-profit-toggle-switch ${profitTargetEnabled ? 'active' : ''}`}
-              onClick={handleToggleProfitTarget}
-              title={profitTargetEnabled ? 'Click to disable system profit target' : 'Click to enable system profit target on all rounds'}
+              className={`jp-profit-toggle-switch ${roundProfitEnabled ? 'active' : ''}`}
+              onClick={handleToggleRoundProfit}
+              title={roundProfitEnabled ? 'Click to disable round profit target' : 'Click to enable round profit target on all rounds'}
             >
               <div className="jp-toggle-knob" />
             </div>
 
-            <span className={`jp-profit-toggle-label ${profitTargetEnabled ? 'on' : 'off'}`}>
-              {profitTargetEnabled ? 'ON' : 'OFF'}
+            <span className={`jp-profit-toggle-label ${roundProfitEnabled ? 'on' : 'off'}`}>
+              {roundProfitEnabled ? 'ON' : 'OFF'}
             </span>
           </div>
 
-          {/* Percentage Target Input */}
+          {/* Quick Customization Presets */}
+          <div className="jp-round-profit-presets">
+            {[25, 50, 75, 100].map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                className={`jp-round-preset-btn ${Number(roundProfitInput) === pct ? 'active' : ''}`}
+                onClick={() => {
+                  setRoundProfitInput(String(pct));
+                  handleSaveRoundProfit(pct);
+                }}
+                disabled={roundProfitLoading}
+                title={`Quick customize round profit target to ${pct}%`}
+              >
+                {pct}%
+              </button>
+            ))}
+          </div>
+
+          {/* Percentage Target Input & Set Button */}
           <div className="jp-profit-input-group">
             <div className="jp-profit-input-wrap">
               <input
@@ -468,35 +570,35 @@ export default function JetPesaAdminPage() {
                 max="100"
                 step="5"
                 placeholder="50"
-                value={profitTargetInput}
-                onChange={(e) => setProfitTargetInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveProfitPercent(); }}
+                value={roundProfitInput}
+                onChange={(e) => setRoundProfitInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveRoundProfit(); }}
                 className="jp-profit-input"
-                title="Percentage house profit target applied to all rounds (1% to 100%)"
+                title="Percentage house profit target on real wagers across all rounds (1% to 100%)"
               />
               <span className="jp-profit-currency">%</span>
             </div>
             <button
               type="button"
               className="jp-profit-apply-btn"
-              onClick={handleSaveProfitPercent}
-              disabled={profitTargetLoading || !profitTargetInput}
-              title="Save percentage target for all rounds"
+              onClick={() => handleSaveRoundProfit()}
+              disabled={roundProfitLoading || !roundProfitInput}
+              title="Save custom round profit target for all rounds"
             >
-              {profitTargetLoading ? '...' : 'SET'}
+              {roundProfitLoading ? '...' : 'SET'}
             </button>
           </div>
 
-          {/* Live Status Display across all rounds */}
+          {/* Live Status Display across all rounds real wagers */}
           <div className="jp-profit-status-display">
-            {profitTargetEnabled ? (
+            {roundProfitEnabled ? (
               <div
                 className={`jp-profit-status-badge ${profitTargetData?.isSecured ? 'secured' : 'active'}`}
-                title={profitTargetData?.reason || `System enforces ${profitTargetInput}% profit across all rounds`}
+                title={profitTargetData?.reason || `System enforces ${roundProfitInput}% profit on real wagers`}
               >
                 <span className={`jp-profit-indicator-dot ${profitTargetData?.isSecured ? 'secured' : 'active'}`} />
                 <span className="jp-profit-target-val">
-                  ALL ROUNDS: {profitTargetInput}% TARGET
+                  ALL ROUNDS: {roundProfitInput}% WAGERS LOCK
                 </span>
                 {profitTargetData?.safeMultiplierCap && (
                   <span className="jp-profit-cap-tag">
@@ -508,7 +610,7 @@ export default function JetPesaAdminPage() {
                 )}
               </div>
             ) : (
-              <div className="jp-profit-status-badge idle" title="System profit target is OFF. All rounds use natural Provably Fair seed.">
+              <div className="jp-profit-status-badge idle" title="Round profit target is OFF. All rounds use natural Provably Fair seed.">
                 <span className="jp-profit-indicator-dot idle" />
                 <span>OFF (PROVABLY FAIR)</span>
               </div>
@@ -698,14 +800,14 @@ export default function JetPesaAdminPage() {
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div 
-                      className={`jp-profit-toggle-switch ${profitTargetEnabled ? 'active' : ''}`}
-                      onClick={handleToggleProfitTarget}
-                      title={profitTargetEnabled ? 'Click to disable system profit lock' : 'Click to enable system profit lock'}
+                      className={`jp-profit-toggle-switch ${dailyTargetEnabled ? 'active' : ''}`}
+                      onClick={handleToggleDailyTarget}
+                      title={dailyTargetEnabled ? 'Click to disable daily profit engine' : 'Click to enable daily profit engine'}
                     >
                       <div className="jp-toggle-knob" />
                     </div>
-                    <span className={`jp-profit-toggle-label ${profitTargetEnabled ? 'on' : 'off'}`}>
-                      {profitTargetEnabled ? 'ON' : 'OFF'}
+                    <span className={`jp-profit-toggle-label ${dailyTargetEnabled ? 'on' : 'off'}`}>
+                      {dailyTargetEnabled ? 'ON' : 'OFF'}
                     </span>
                   </div>
                 </div>
@@ -748,7 +850,7 @@ export default function JetPesaAdminPage() {
                       KES {(houseProfitEngine?.calculatedDailyTargetKes || 0).toLocaleString()}
                     </span>
                     <span className="jp-engine-metric-sub">
-                      Locks {profitTargetInput || 50}% margin on active funds
+                      Locks {dailyTargetInput || 50}% margin on active funds
                     </span>
                   </div>
                 </div>
@@ -788,12 +890,12 @@ export default function JetPesaAdminPage() {
                       <button
                         key={p.val}
                         type="button"
-                        className={`jp-engine-preset-btn ${Number(profitTargetInput) === p.val ? 'active' : ''}`}
+                        className={`jp-engine-preset-btn ${Number(dailyTargetInput) === p.val ? 'active' : ''}`}
                         onClick={() => {
-                          setProfitTargetInput(String(p.val));
-                          handleSaveProfitPercent(p.val);
+                          setDailyTargetInput(String(p.val));
+                          handleSaveDailyTarget(p.val);
                         }}
-                        disabled={profitTargetLoading}
+                        disabled={dailyTargetLoading}
                       >
                         {p.label}
                       </button>
@@ -806,20 +908,20 @@ export default function JetPesaAdminPage() {
                         type="number"
                         min="1"
                         max="100"
-                        value={profitTargetInput}
-                        onChange={(e) => setProfitTargetInput(e.target.value)}
+                        value={dailyTargetInput}
+                        onChange={(e) => setDailyTargetInput(e.target.value)}
                         className="jp-profit-input"
-                        title="House profit retention percentage applied across all rounds"
+                        title="Daily profit retention percentage applied to deposits and player funds"
                       />
                       <span className="jp-profit-currency">%</span>
                     </div>
                     <button
                       type="button"
                       className="jp-engine-lock-btn"
-                      onClick={() => handleSaveProfitPercent()}
-                      disabled={profitTargetLoading}
+                      onClick={() => handleSaveDailyTarget()}
+                      disabled={dailyTargetLoading}
                     >
-                      {profitTargetLoading ? '...' : 'LOCK & APPLY'}
+                      {dailyTargetLoading ? '...' : 'LOCK & APPLY'}
                     </button>
                   </div>
                 </div>
@@ -1593,6 +1695,11 @@ export default function JetPesaAdminPage() {
         .jp-profit-toggle-label { font-size: 9px; font-weight: 900; letter-spacing: 0.05em; min-width: 22px; }
         .jp-profit-toggle-label.on { color: #34d399; }
         .jp-profit-toggle-label.off { color: #64748b; }
+
+        .jp-round-profit-presets { display: flex; align-items: center; gap: 3px; }
+        .jp-round-preset-btn { background: #0c1322; border: 1px solid rgba(255, 255, 255, 0.1); color: #94a3b8; font-size: 8px; font-weight: 800; padding: 2px 5px; border-radius: 4px; cursor: pointer; transition: all 0.12s; }
+        .jp-round-preset-btn.active { background: #1e293b; color: #34d399; border-color: #34d399; }
+        .jp-round-preset-btn:hover { color: #fff; border-color: rgba(52, 211, 153, 0.4); }
 
         .jp-profit-input-group { display: flex; align-items: center; gap: 4px; }
         .jp-profit-input-wrap { display: flex; align-items: center; background: #040814; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 5px; padding: 2px 6px; gap: 3px; }
