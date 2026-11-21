@@ -2142,7 +2142,7 @@ export default function UltimateJetPesaCockpit() {
         <div className="jp-modal-overlay" onClick={() => setIsDepositModalOpen(false)}>
           <div className="jp-modal-box jp-modal-green" onClick={(e) => e.stopPropagation()}>
             <button className="jp-modal-close" onClick={() => setIsDepositModalOpen(false)}><Icon name="x" size={20} /></button>
-            <h3 className="jp-modal-title" style={{ color: '#22c55e' }}>M-Pesa Deposit (PrintPay)</h3>
+            <h3 className="jp-modal-title" style={{ color: '#22c55e' }}>M-Pesa Express Deposit</h3>
             <div className="jp-modal-field"><label className="jp-modal-label">DEPOSIT AMOUNT (MIN 10 KES)</label><input type="number" value={inputAmount} onChange={(e) => setInputAmount(e.target.value)} className="jp-modal-input" /></div>
             <div className="jp-modal-field"><label className="jp-modal-label">M-PESA REGISTERED PHONE</label><input type="text" value={inputPhone} onChange={(e) => setInputPhone(e.target.value)} placeholder="07XXXXXXXX or 01XXXXXXXX" className="jp-modal-input" /></div>
             <button onClick={handlePaymentInitiation} disabled={loadingDeposit} className="jp-modal-btn jp-btn-green">{loadingDeposit ? 'SENDING STK PROMPT...' : 'AUTHORIZE STK DEPOSIT'}</button>

@@ -428,7 +428,7 @@ function AuthForm() {
       {/* Security Footer */}
       <p className="jp-auth-footer">
         <Icon name="shield-check" size={14} />
-        Encrypted wallet access • PrintPay verified
+        Encrypted wallet access • Safaricom M-Pesa verified
       </p>
     </div>
   );

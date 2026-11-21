@@ -1419,7 +1419,7 @@ export default function JetPesaAdminPage() {
             {/* KPI Cards */}
             <div className="jp-kpi-grid">
               <div className="jp-kpi-card">
-                <label>PRINT-PAY B2C FLOAT (M-PESA)</label>
+                <label>SAFARICOM B2C FLOAT (M-PESA)</label>
                 <div className="jp-kpi-val text-cyan">
                   {overviewData.stats.printPayBalance !== null
                     ? `KES ${overviewData.stats.printPayBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
