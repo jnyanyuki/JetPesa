@@ -15,6 +15,7 @@ import PlinkoGame from '../../components/games/plinko/PlinkoGame';
 import DiceGame from '../../components/games/dice/DiceGame';
 import CoinflipGame from '../../components/games/coinflip/CoinflipGame';
 import HiloGame from '../../components/games/hilo/HiloGame';
+import RouletteGame from '../../components/games/roulette/RouletteGame';
 
 const MIN_WAGER = 10;
 const HISTORY_STORAGE_KEY = 'jetpesa_real_previous_rounds';
@@ -2119,6 +2120,14 @@ export default function UltimateJetPesaCockpit() {
             />
           ) : activeGameId === 'hilo' ? (
             <HiloGame
+              balance={balance}
+              onBalanceChange={setBalance}
+              triggerToast={triggerToast}
+              onOpenDeposit={() => setIsDepositModalOpen(true)}
+              onOpenProvably={openProvablyModal}
+            />
+          ) : activeGameId === 'roulette' ? (
+            <RouletteGame
               balance={balance}
               onBalanceChange={setBalance}
               triggerToast={triggerToast}
