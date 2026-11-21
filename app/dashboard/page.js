@@ -1810,9 +1810,9 @@ export default function UltimateJetPesaCockpit() {
               </button>
             </div>
 
-            {/* 2x2 Quick Stake Grid: 100, 250, 1000, 25000 (Spribe Aviator Standard) */}
+            {/* 2x2 Quick Stake Grid: 50, 100, 250, 500 (Spribe Aviator Standard) */}
             <div className="jp-quick-grid-2x2">
-              {[100, 250, 1000, 25000].map((v) => (
+              {[50, 100, 250, 500].map((v) => (
                 <button
                   key={v}
                   type="button"
@@ -2969,7 +2969,7 @@ export default function UltimateJetPesaCockpit() {
           margin: 0;
         }
 
-        /* 2x2 Quick Stake Grid: 50, 500, 1000, 10000 */
+        /* 2x2 Quick Stake Grid: 50, 100, 250, 500 */
         .jp-quick-grid-2x2 {
           display: grid;
           grid-template-columns: 1fr 1fr;
