@@ -104,6 +104,7 @@ export default function GamesLobbyPage() {
 
   // User state
   const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [balance, setBalance] = useState(0.0);
   const [userIdCode, setUserIdCode] = useState('');
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
@@ -144,9 +145,20 @@ export default function GamesLobbyPage() {
               setBalance(Number(data.walletBalance || data.balance || 0));
             }
           }
+        } else if (isMounted) {
+          setUser(null);
+          setUserIdCode('');
+          setBalance(0);
         }
       } catch (err) {
         console.warn('Error loading session in games lobby:', err);
+        if (isMounted) {
+          setUser(null);
+          setUserIdCode('');
+          setBalance(0);
+        }
+      } finally {
+        if (isMounted) setAuthChecked(true);
       }
     }
     loadSession();
@@ -205,6 +217,21 @@ export default function GamesLobbyPage() {
     });
   }, [selectedCategory, searchQuery]);
 
+  // Handle game launch: if unauthenticated, navigate to auth form with target game
+  const handleGameLaunch = (e, game) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!game.isLive) {
+      showToast(`${game.title} is currently in final audit! Scheduled for release next.`);
+      return;
+    }
+    if (!user) {
+      const redirectUrl = `/dashboard?game=${game.id}`;
+      router.push(`/auth?tab=login&redirect=${encodeURIComponent(redirectUrl)}&game=${encodeURIComponent(game.title)}`);
+      return;
+    }
+    router.push(`/dashboard?game=${game.id}`);
+  };
+
   return (
     <div className="jp-lobby-page">
       {/* Toast Notification */}
@@ -229,32 +256,92 @@ export default function GamesLobbyPage() {
           </div>
         </div>
 
-        <div className="jp-header-right">
-          <Link href="/dashboard" className="jp-back-cockpit-btn">
-            <span>✈️ RETURN TO COCKPIT</span>
-          </Link>
+        {user ? (
+          <div className="jp-header-right">
+            <Link href="/dashboard" className="jp-back-cockpit-btn">
+              <span>✈️ RETURN TO COCKPIT</span>
+            </Link>
 
-          {userIdCode && (
-            <div className="jp-user-id-pill" title={`8-Digit Pilot ID: ${userIdCode}`}>
-              <span>ID: {userIdCode}</span>
-            </div>
-          )}
+            {userIdCode && (
+              <div className="jp-user-id-pill" title={`8-Digit Pilot ID: ${userIdCode}`}>
+                <span>ID: {userIdCode}</span>
+              </div>
+            )}
 
-          <div className="jp-wallet-pill">
-            <div className="jp-balance-val">
-              <span className="jp-currency">KES</span>
-              <strong className="jp-amount">{balance.toFixed(2)}</strong>
+            <div className="jp-wallet-pill">
+              <div className="jp-balance-val">
+                <span className="jp-currency">KES</span>
+                <strong className="jp-amount">{balance.toFixed(2)}</strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDepositModalOpen(true)}
+                className="jp-deposit-btn"
+              >
+                DEPOSIT
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsDepositModalOpen(true)}
-              className="jp-deposit-btn"
-            >
-              DEPOSIT
-            </button>
           </div>
-        </div>
+        ) : (
+          <div className="jp-header-right jp-header-unauth">
+            <Link href="/auth?tab=login&redirect=/games" className="jp-btn-login-ghost">
+              LOG IN
+            </Link>
+            <Link href="/auth?tab=signup&redirect=/games" className="jp-btn-register-solid">
+              <span>REGISTER</span>
+              <span className="jp-register-fast-dot" />
+            </Link>
+          </div>
+        )}
       </header>
+
+      {/* =================================================================== */}
+      {/* UN-AUTHENTICATED LANDING HERO BANNER                                */}
+      {/* =================================================================== */}
+      {!user && (
+        <section className="jp-unauth-landing-hero">
+          <div className="jp-unauth-hero-inner">
+            <div className="jp-unauth-pill-tag">
+              <span className="jp-pulse-red-dot" />
+              <span>KENYA&apos;S PREMIER REAL-MONEY CASINO & CRASH ARCADE</span>
+            </div>
+            <h1 className="jp-unauth-title">
+              Instant Flights. Real Multipliers. <br />
+              <span className="jp-title-gradient">Zero Waiting. Instant M-Pesa Cashouts.</span>
+            </h1>
+            <p className="jp-unauth-desc">
+              Experience Kenya&apos;s leading provably fair multiplier games with automated Safaricom M-Pesa STK deposits and lightning-fast B2C cashouts from KES 10. Click any game to play or register in 10 seconds.
+            </p>
+            <div className="jp-unauth-cta-row">
+              <Link href="/auth?tab=signup&redirect=/games" className="jp-cta-primary-green">
+                <span>CREATE FREE ACCOUNT</span>
+                <span className="jp-cta-arrow">➔</span>
+              </Link>
+              <Link href="/auth?tab=login&redirect=/games" className="jp-cta-secondary-ghost">
+                <span>PILOT SIGN IN</span>
+              </Link>
+            </div>
+            <div className="jp-unauth-perks-row">
+              <div className="jp-perk-item">
+                <span className="jp-perk-icon">⚡</span>
+                <span>Instant M-Pesa STK</span>
+              </div>
+              <div className="jp-perk-item">
+                <span className="jp-perk-icon">🛡️</span>
+                <span>BCLB Licensed (Cap 131)</span>
+              </div>
+              <div className="jp-perk-item">
+                <span className="jp-perk-icon">🎲</span>
+                <span>SHA-256 Provably Fair</span>
+              </div>
+              <div className="jp-perk-item">
+                <span className="jp-perk-icon">💰</span>
+                <span>KES 10 Minimum Entry</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* =================================================================== */}
       {/* CONTROLS: CATEGORIES & SEARCH                                       */}
@@ -303,7 +390,8 @@ export default function GamesLobbyPage() {
             return (
               <div
                 key={game.id}
-                className={`jp-game-card ${game.isLive ? 'is-live' : 'is-upcoming'}`}
+                onClick={(e) => handleGameLaunch(e, game)}
+                className={`jp-game-card ${game.isLive ? 'is-live' : 'is-upcoming'} jp-card-clickable`}
                 style={{ '--card-accent': game.accentColor }}
               >
                 {/* Header: Icon + Badge */}
@@ -369,10 +457,17 @@ export default function GamesLobbyPage() {
                 {/* CTA Action */}
                 <div className="jp-card-footer">
                   {game.isLive ? (
-                    <Link href={gameHref} className="jp-play-btn">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleGameLaunch(e, game);
+                      }}
+                      className="jp-play-btn"
+                    >
                       <span>PLAY {game.shortName.toUpperCase()} NOW</span>
                       <span className="jp-play-arrow">➔</span>
-                    </Link>
+                    </button>
                   ) : (
                     <button
                       type="button"
@@ -643,6 +738,206 @@ export default function GamesLobbyPage() {
 
         .jp-deposit-btn:hover {
           filter: brightness(1.15);
+        }
+
+        /* Unauthenticated Header Navigation */
+        .jp-header-unauth {
+          gap: 10px;
+        }
+
+        .jp-btn-login-ghost {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          color: #f1f5f9;
+          font-size: 12px;
+          font-weight: 800;
+          padding: 8px 18px;
+          border-radius: 9px;
+          text-decoration: none;
+          letter-spacing: 0.03em;
+          transition: all 0.15s ease;
+        }
+
+        .jp-btn-login-ghost:hover {
+          background: rgba(255, 255, 255, 0.12);
+          border-color: rgba(255, 255, 255, 0.3);
+          color: #ffffff;
+        }
+
+        .jp-btn-register-solid {
+          background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+          border: none;
+          color: #ffffff;
+          font-size: 12px;
+          font-weight: 900;
+          padding: 8px 20px;
+          border-radius: 9px;
+          text-decoration: none;
+          letter-spacing: 0.04em;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4);
+          transition: all 0.15s ease;
+        }
+
+        .jp-btn-register-solid:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.1);
+          box-shadow: 0 6px 20px rgba(34, 197, 94, 0.6);
+        }
+
+        .jp-register-fast-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #ffffff;
+        }
+
+        /* Unauthenticated Landing Hero Banner */
+        .jp-unauth-landing-hero {
+          padding: 56px 24px 40px;
+          background: radial-gradient(circle at 50% 10%, rgba(239, 68, 68, 0.14) 0%, rgba(15, 23, 42, 0) 75%),
+                      linear-gradient(180deg, rgba(15, 23, 42, 0.5) 0%, transparent 100%);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          display: flex;
+          justify-content: center;
+          text-align: center;
+        }
+
+        .jp-unauth-hero-inner {
+          max-width: 840px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .jp-unauth-pill-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 11px;
+          font-weight: 900;
+          color: #ef4444;
+          letter-spacing: 0.08em;
+          background: rgba(239, 68, 68, 0.1);
+          border: 1px solid rgba(239, 68, 68, 0.25);
+          padding: 4px 12px;
+          border-radius: 999px;
+        }
+
+        .jp-pulse-red-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #ef4444;
+          box-shadow: 0 0 10px #ef4444;
+          animation: pulseRed 1.8s infinite;
+        }
+
+        @keyframes pulseRed {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.85); }
+        }
+
+        .jp-unauth-title {
+          font-size: 38px;
+          font-weight: 900;
+          line-height: 1.14;
+          margin: 0;
+          letter-spacing: -0.03em;
+        }
+
+        .jp-title-gradient {
+          background: linear-gradient(135deg, #ffffff 20%, #38bdf8 65%, #22c55e 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+
+        .jp-unauth-desc {
+          font-size: 15px;
+          color: #94a3b8;
+          max-width: 660px;
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        .jp-unauth-cta-row {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          margin-top: 6px;
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+
+        .jp-cta-primary-green {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          background: linear-gradient(135deg, #15803d 0%, #22c55e 100%);
+          color: #ffffff;
+          font-size: 14px;
+          font-weight: 900;
+          padding: 13px 28px;
+          border-radius: 12px;
+          text-decoration: none;
+          letter-spacing: 0.03em;
+          box-shadow: 0 8px 24px rgba(34, 197, 94, 0.45);
+          transition: all 0.15s ease;
+        }
+
+        .jp-cta-primary-green:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 30px rgba(34, 197, 94, 0.65);
+          filter: brightness(1.1);
+        }
+
+        .jp-cta-secondary-ghost {
+          display: inline-flex;
+          align-items: center;
+          padding: 13px 26px;
+          border-radius: 12px;
+          font-size: 14px;
+          font-weight: 800;
+          color: #e2e8f0;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          text-decoration: none;
+          transition: all 0.15s ease;
+        }
+
+        .jp-cta-secondary-ghost:hover {
+          background: rgba(255, 255, 255, 0.12);
+          border-color: rgba(255, 255, 255, 0.3);
+          color: #ffffff;
+        }
+
+        .jp-unauth-perks-row {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin-top: 10px;
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+
+        .jp-perk-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 700;
+          color: #cbd5e1;
+          background: rgba(15, 23, 42, 0.6);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          padding: 6px 14px;
+          border-radius: 999px;
+        }
+
+        .jp-card-clickable {
+          cursor: pointer;
         }
 
         /* Hero / Trust Banner (After Games) */

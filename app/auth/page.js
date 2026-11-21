@@ -75,6 +75,22 @@ function AuthForm() {
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const targetGame = searchParams.get('game');
+  const redirectParam = searchParams.get('redirect');
+
+  const navigateAfterAuth = () => {
+    if (redirectParam) {
+      router.replace(redirectParam);
+      return;
+    }
+    if (targetGame) {
+      const slug = targetGame.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      router.replace(`/dashboard?game=${slug}`);
+      return;
+    }
+    router.replace('/dashboard');
+  };
+
   useEffect(() => {
     setMounted(true);
     const targetTab = searchParams.get('tab');
@@ -140,7 +156,7 @@ function AuthForm() {
           throw new Error(error.message || 'Invalid email or password.');
         }
 
-        router.replace('/dashboard');
+        navigateAfterAuth();
         return;
       }
 
@@ -185,7 +201,7 @@ function AuthForm() {
           body: JSON.stringify({ phone: cleanMpesaPhone, displayName: cleanMpesaPhone }),
         }).catch(() => {});
 
-        router.replace('/dashboard');
+        navigateAfterAuth();
         return;
       }
 
@@ -206,7 +222,7 @@ function AuthForm() {
           throw new Error(error.message || 'Registration failed.');
         }
 
-        router.replace('/dashboard');
+        navigateAfterAuth();
         return;
       }
     } catch (err) {
@@ -235,6 +251,12 @@ function AuthForm() {
           JET<span>PESA</span>
         </h1>
         <p className="jp-auth-subtitle">Fast flights. Instant cashouts.</p>
+        {targetGame && (
+          <div className="jp-auth-game-banner">
+            <Icon name="sparkles" size={15} />
+            <span>Sign in to launch <strong>{targetGame}</strong></span>
+          </div>
+        )}
       </div>
 
       {/* Main Mode Tabs: Sign In / Sign Up */}
@@ -542,6 +564,19 @@ export default function AuthenticatonPortal() {
           color: #94a3b8;
           font-size: 13px;
           font-weight: 600;
+        }
+        .jp-auth-game-banner {
+          margin-top: 10px;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          background: rgba(34, 197, 94, 0.12);
+          border: 1px solid rgba(34, 197, 94, 0.35);
+          color: #4ade80;
+          padding: 6px 14px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 700;
         }
         .jp-auth-tabs {
           display: flex;

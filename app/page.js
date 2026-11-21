@@ -450,6 +450,9 @@ export default function JetPesaLandingPage() {
         </Link>
 
         <div className="jp-nav-center">
+          <Link href="/games" className="jp-nav-link" style={{ color: '#22c55e', fontWeight: '800' }}>
+            All Games (8)
+          </Link>
           <a href="#demo" className="jp-nav-link">Live Demo</a>
           <a href="#jackpot" className="jp-nav-link">Jackpot</a>
           <a href="#features" className="jp-nav-link">Features</a>

@@ -733,7 +733,9 @@ export default function UltimateJetPesaCockpit() {
       try {
         const { data: session } = await authClient.getSession();
         if (!session?.user) {
-          router.push('/auth');
+          const currentQuery = typeof window !== 'undefined' ? window.location.search : '';
+          const redirectTarget = `/dashboard${currentQuery}`;
+          router.push(`/auth?redirect=${encodeURIComponent(redirectTarget)}`);
           return;
         }
 
